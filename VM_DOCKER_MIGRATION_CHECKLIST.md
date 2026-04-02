@@ -174,7 +174,68 @@ docker compose version
 - [ ] Docker 可用
 - [ ] `docker compose` 可用
 
-### 3.2 拉取代码
+### 3.2 给 GitHub 仓库添加 Deploy Key
+
+如果你的代码仓库是私有仓库，推荐在这台 VM 上生成一把专门用于部署的 SSH key，然后把公钥加到 GitHub 仓库的 `Deploy keys`。
+
+Deploy key 的特点：
+
+- 只绑定单个仓库
+- 默认只读，适合部署拉代码
+- 如果你需要在服务器上反向 push 代码，再勾选写权限
+
+在 VM 上执行：
+
+```bash
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+ssh-keygen -t ed25519 -C "teaching-open deploy key" -f ~/.ssh/teaching_open_deploy -N ""
+chmod 600 ~/.ssh/teaching_open_deploy
+chmod 644 ~/.ssh/teaching_open_deploy.pub
+cat ~/.ssh/teaching_open_deploy.pub
+```
+
+把输出的整行公钥复制出来，然后到 GitHub 仓库页面操作：
+
+1. 打开你的仓库主页
+2. 进入 `Settings`
+3. 点击左侧 `Deploy keys`
+4. 点击 `Add deploy key`
+5. `Title` 填一个容易识别的名字，例如 `teaching-open-vm`
+6. `Key` 粘贴刚才复制的公钥
+7. 如果服务器只需要 `git clone` / `git pull`，不要勾选 `Allow write access`
+8. 点击 `Add key`
+
+然后在 VM 上写 SSH 配置：
+
+```bash
+cat > ~/.ssh/config <<'EOF'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/teaching_open_deploy
+  IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+ssh-keyscan github.com >> ~/.ssh/known_hosts
+chmod 644 ~/.ssh/known_hosts
+```
+
+测试连接：
+
+```bash
+ssh -T git@github.com
+```
+
+如果看到类似 `Hi <你的 GitHub 用户名>!` 或成功认证的提示，就说明 deploy key 已经生效。
+
+注意：
+
+- 一把 deploy key 只能绑定一个 GitHub 仓库，多个仓库不能复用同一把 key
+- 如果同一台 VM 需要访问多个私有仓库，建议每个仓库生成一把独立 key，再用 `~/.ssh/config` 配不同的 `Host` 别名
+- 如果你不想用 deploy key，也可以改用 HTTPS + Personal Access Token，但长期部署通常还是 SSH 更省事
+
+### 3.3 拉取代码
 
 ```bash
 cd /opt
