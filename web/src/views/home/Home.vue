@@ -142,6 +142,7 @@ import Vue from 'vue'
 import { getAction, getFileAccessHttpUrl } from '@/api/manage'
 import { ACCESS_TOKEN } from '@/store/mutation-types'
 import { mapActions, mapGetters } from 'vuex'
+import { DEFAULT_BRAND_ICON, DEFAULT_BRAND_LOGO } from '@/constants/branding'
 import Header from './modules/Header'
 import Banner from './modules/Banner'
 import Footer from './modules/Footer'
@@ -160,8 +161,8 @@ export default {
   data() {
     return {
       brandName: this.$store.getters.sysConfig.brandName,
-      logo: '/logo.png',
-      avatarUrl: '/logo.png',
+      logo: DEFAULT_BRAND_LOGO,
+      avatarUrl: DEFAULT_BRAND_ICON,
       token: '',
       greatLeaderboard: [],
       starLeaderboard: [],

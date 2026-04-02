@@ -9,7 +9,7 @@
 
 <script>
   import { mixin } from '@/utils/mixin.js'
-  import { getFileAccessHttpUrl } from '@/api/manage'
+  import { DEFAULT_BRAND_LOGO } from '@/constants/branding'
   export default {
     name: 'Logo',
     mixins: [mixin],
@@ -23,14 +23,12 @@
     data () {
       return {
          brandName: this.$store.getters.sysConfig.brandName,
-         logo: '/logo.png'
+         logo: DEFAULT_BRAND_LOGO
       }
     },
     created() {
-    if(this.$store.getters.sysConfig.logo){
-      this.logo = getFileAccessHttpUrl(this.$store.getters.sysConfig.logo)
-    }
-  },
+      this.logo = DEFAULT_BRAND_LOGO
+    },
   }
 </script>
 <style lang="less" scoped>

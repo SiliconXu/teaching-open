@@ -65,6 +65,7 @@ DROP TABLE IF EXISTS `teaching_depart_day_log`;
 DROP TABLE IF EXISTS `teaching_menu`;
 DROP TABLE IF EXISTS `teaching_news`;
 DROP TABLE IF EXISTS `teaching_scratch_assets`;
+DROP TABLE IF EXISTS `teaching_scratch_backpack`;
 DROP TABLE IF EXISTS `teaching_student`;
 DROP TABLE IF EXISTS `teaching_work`;
 DROP TABLE IF EXISTS `teaching_work_comment`;
@@ -1076,6 +1077,21 @@ CREATE TABLE `teaching_scratch_assets` (
   PRIMARY KEY (`id`) USING BTREE,
   KEY `assetNameIndex` (`asset_name`) USING BTREE,
   KEY `md5extindex` (`md5_ext`(255)) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+CREATE TABLE `teaching_scratch_backpack` (
+  `id` varchar(40) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `user_id` varchar(40) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL COMMENT '所属用户id',
+  `name` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL COMMENT '名称',
+  `mime` varchar(100) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL COMMENT 'mime',
+  `type` varchar(50) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL COMMENT '条目类型',
+  `body_path` varchar(1000) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL COMMENT '内容存储路径',
+  `thumbnail_path` varchar(1000) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL COMMENT '缩略图存储路径',
+  `storage_type` varchar(20) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL COMMENT '存储类型 local/minio/qiniu/alioss',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  `del_flag` tinyint NOT NULL DEFAULT '0' COMMENT '删除状态',
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `userCreateTimeIndex` (`user_id`,`create_time`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
 CREATE TABLE `teaching_student` (
   `id` varchar(36) NOT NULL,

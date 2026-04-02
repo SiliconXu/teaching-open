@@ -65,11 +65,7 @@ window.getSysConfig = function(key){
 }
 
 window.getLogo = function(){
-  if(getSysConfig('uploadType') == "qiniu"){
-    return getSysConfig('qiniuDomain') + "/" + getSysConfig('logo')
-  }else{
-    return getSysConfig('staticDomain') + "/" + getSysConfig('logo')
-  }
+  return '/logo/vulcoding_logo_horizontal_nav.svg'
 }
 
 window.getWorkInfo = function(workId, cb) {

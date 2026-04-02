@@ -60,6 +60,7 @@ import { getAction, postAction } from '@/api/manage'
 import JEllipsis from '@/components/jeecg/JEllipsis'
 import Vue from 'vue'
 import { TENANT_CONFIG, ACCESS_TOKEN } from '@/store/mutation-types'
+import { DEFAULT_BRAND_ICON } from '@/constants/branding'
 
 export default {
   components: {
@@ -68,7 +69,7 @@ export default {
   data() {
     return {
       userId: '',
-      avatarUrl: '/logo.png',
+      avatarUrl: DEFAULT_BRAND_ICON,
       userInfo: {},
       isAttention: false,
       userWorkList: [],

@@ -22,7 +22,7 @@
 <script>
   import RouteView from "@/components/layouts/RouteView"
   import { mixinDevice } from '@/utils/mixin.js'
-  import { getFileAccessHttpUrl } from '@/api/manage'
+  import { DEFAULT_BRAND_ICON } from '@/constants/branding'
   export default {
     name: "UserLayout",
     components: { RouteView },
@@ -31,13 +31,11 @@
       return {
          brandName: this.$store.getters.sysConfig.brandName,
          brandDesc: this.$store.getters.sysConfig.brandDesc,
-         logo: '/logo.png'
+         logo: DEFAULT_BRAND_ICON
       }
     },
     created() {
-      if(this.$store.getters.sysConfig.logo){
-        this.logo = getFileAccessHttpUrl(this.$store.getters.sysConfig.logo)
-      }
+      this.logo = DEFAULT_BRAND_ICON
     },
     mounted () {
       document.body.classList.add('userLayout')
@@ -77,14 +75,19 @@
         text-align: center;
 
         .header {
+          display: inline-flex;
+          align-items: center;
           max-height: 144px;
           line-height: 44px;
 
           .logo {
+            width: 88px;
+            height: 88px;
             max-height: 88px;
             vertical-align: top;
-            margin-right: 16px;
+            margin-right: 18px;
             border-style: none;
+            object-fit: contain;
           }
 
           .title {
@@ -93,7 +96,7 @@
             font-family: "Chinese Quote", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
             font-weight: 600;
             position: relative;
-            top: 2px;
+            top: 0;
           }
         }
         .desc {

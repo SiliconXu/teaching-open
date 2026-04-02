@@ -1,4 +1,5 @@
-FROM nginx
+ARG BASE_IMAGE=nginx
+FROM ${BASE_IMAGE}
 VOLUME /tmp
 ENV LANG en_US.UTF-8
 RUN mkdir -p /usr/share/nginx/html

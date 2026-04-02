@@ -18,19 +18,20 @@ import Vue from 'vue'
 import { mapActions, mapGetters } from 'vuex'
 import { ACCESS_TOKEN } from '@/store/mutation-types'
 import { getFileAccessHttpUrl } from "@/api/manage"
+import { DEFAULT_BRAND_ICON, DEFAULT_BRAND_LOGO } from '@/constants/branding'
 export default {
   data() {
     return {
       brandName: this.$store.getters.sysConfig.brandName,
       token: '',
-      logo: '/logo.png',
-      logo2: '/logo.png',
-      avatarUrl: '/logo.png',
+      logo: DEFAULT_BRAND_LOGO,
+      logo2: DEFAULT_BRAND_ICON,
+      avatarUrl: DEFAULT_BRAND_ICON,
     }
   },
   created() {
     this.token = Vue.ls.get(ACCESS_TOKEN)
-    if(this.$store.getters.sysConfig.logo && this.$store.getters.sysConfig.qiniuDomain){
+    if(this.$store.getters.sysConfig.logo2 && this.$store.getters.sysConfig.qiniuDomain){
       this.logo2 = this.$store.getters.sysConfig.qiniuDomain + "/" + this.$store.getters.sysConfig.logo2
     }
     if (this.$store.getters.sysConfig.avatar && this.$store.getters.sysConfig.qiniuDomain) {

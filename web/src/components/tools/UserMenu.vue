@@ -96,6 +96,7 @@
   import { mapActions, mapGetters,mapState } from 'vuex'
   import { mixinDevice } from '@/utils/mixin.js'
   import { getFileAccessHttpUrl } from "@/api/manage"
+  import { DEFAULT_BRAND_ICON } from '@/constants/branding'
 
   export default {
     name: "UserMenu",
@@ -160,9 +161,11 @@
       ...mapGetters(["nickname", "avatar","userInfo"]),
       getFileAccessHttpUrl,
       getAvatar(){
-        let avatarUrl = '/logo.png'
+        let avatarUrl = DEFAULT_BRAND_ICON
         if (this.$store.getters.sysConfig.avatar && this.$store.getters.sysConfig.qiniuDomain) {
           avatarUrl = this.$store.getters.sysConfig.qiniuDomain + '/' + this.$store.getters.sysConfig.avatar
+        } else if (this.$store.getters.sysConfig.logo2) {
+          avatarUrl = getFileAccessHttpUrl(this.$store.getters.sysConfig.logo2)
         }
         if(this.getFileAccessHttpUrl(this.avatar())){
           avatarUrl = this.getFileAccessHttpUrl(this.avatar())

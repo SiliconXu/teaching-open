@@ -1,4 +1,5 @@
-FROM openjdk:8
+ARG BASE_IMAGE=openjdk:8
+FROM ${BASE_IMAGE}
 
 ## 创建目录，并使用它作为工作目录
 RUN mkdir -p /teaching-open-api-server

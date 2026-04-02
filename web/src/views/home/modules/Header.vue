@@ -24,6 +24,7 @@
 import { mapActions, mapGetters } from 'vuex'
 import TMenu from '@/components/menu/tmenu'
 import { getFileAccessHttpUrl } from "@/api/manage"
+import { DEFAULT_BRAND_ICON, DEFAULT_BRAND_LOGO } from '@/constants/branding'
 export default {
   components: {
     TMenu,
@@ -31,20 +32,17 @@ export default {
   data() {
     return {
       menus: [],
-      logo: '/logo.png',
-      logo2: '/logo.png',
-      avatarUrl: '/logo.png',
+      logo: DEFAULT_BRAND_LOGO,
+      logo2: DEFAULT_BRAND_ICON,
+      avatarUrl: DEFAULT_BRAND_ICON,
       menuFixed: false
     }
   },
   created() {
     this.menus = this.$store.getters.menuList
-    if (this.$store.getters.sysConfig.logo && this.$store.getters.sysConfig.qiniuDomain) {
-      this.logo = this.$store.getters.sysConfig.qiniuDomain + '/' + this.$store.getters.sysConfig.logo
-      this.avatarUrl = this.logo
-    }
     if (this.$store.getters.sysConfig.logo2 && this.$store.getters.sysConfig.qiniuDomain) {
       this.logo2 = this.$store.getters.sysConfig.qiniuDomain + '/' + this.$store.getters.sysConfig.logo2
+      this.avatarUrl = this.logo2
     }
     if (this.$store.getters.sysConfig.avatar && this.$store.getters.sysConfig.qiniuDomain) {
        this.avatarUrl = this.$store.getters.sysConfig.qiniuDomain + '/' + this.$store.getters.sysConfig.avatar
@@ -105,10 +103,12 @@ export default {
   line-height: 30px;
 }
 .logo {
-  max-height: 50px;
+  height: 46px;
+  max-width: 220px;
   width: auto;
   margin-right: 20px;
   display: inline-block;
+  object-fit: contain;
 }
 .brand {
   display: inline-block;
@@ -167,7 +167,9 @@ export default {
   .avatar{
     margin-right: 5px;
     margin-bottom: 5px;
-    max-height: 30px;
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
   }
   span {
     color: #fff;

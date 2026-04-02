@@ -1,0 +1,63 @@
+<svg width="1220" height="390" viewBox="0 18 1220 390" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="navCore" x1="118" y1="82" x2="428" y2="352" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#13C8A3"/>
+      <stop offset="0.5" stop-color="#0E89C9"/>
+      <stop offset="1" stop-color="#FF7E30"/>
+    </linearGradient>
+    <linearGradient id="navV" x1="162" y1="94" x2="376" y2="324" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE07A"/>
+      <stop offset="0.48" stop-color="#FF9A40"/>
+      <stop offset="1" stop-color="#FF5167"/>
+    </linearGradient>
+    <filter id="navShadow" x="-90" y="-90" width="720" height="760" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="12"/>
+      <feGaussianBlur stdDeviation="16"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0431373 0 0 0 0 0.133333 0 0 0 0 0.223529 0 0 0 0.1 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+  </defs>
+  <g filter="url(#navShadow)" transform="translate(54 52) scale(0.72)">
+    <path d="M230 74L374 158V326L230 410L86 326V158L230 74Z" fill="#F6FBFC" stroke="url(#navCore)" stroke-width="14" stroke-linejoin="round"/>
+    <path d="M230 110L334 170V290L230 350L126 290V170L230 110Z" fill="#FFFFFF" stroke="#D6EAEE" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M124 126L230 310L336 126" stroke="url(#navV)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <path d="M86 158L13 116" stroke="url(#navCore)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M86 326L13 368" stroke="url(#navCore)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M374 158L447 116" stroke="url(#navCore)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M374 326L447 368" stroke="url(#navCore)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M230 74V-10" stroke="url(#navCore)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M230 410V494" stroke="url(#navCore)" stroke-width="12" stroke-linecap="round"/>
+
+    <circle cx="13" cy="116" r="16" fill="url(#navCore)"/>
+    <circle cx="13" cy="368" r="16" fill="url(#navCore)"/>
+    <circle cx="447" cy="116" r="16" fill="url(#navCore)"/>
+    <circle cx="447" cy="368" r="16" fill="url(#navCore)"/>
+    <circle cx="230" cy="-10" r="16" fill="url(#navCore)"/>
+    <circle cx="230" cy="494" r="16" fill="url(#navCore)"/>
+    <circle cx="230" cy="74" r="14" fill="#F6FBFC" stroke="url(#navCore)" stroke-width="7"/>
+    <circle cx="86" cy="158" r="14" fill="#F6FBFC" stroke="url(#navCore)" stroke-width="7"/>
+    <circle cx="86" cy="326" r="14" fill="#F6FBFC" stroke="url(#navCore)" stroke-width="7"/>
+    <circle cx="374" cy="158" r="14" fill="#F6FBFC" stroke="url(#navCore)" stroke-width="7"/>
+    <circle cx="374" cy="326" r="14" fill="#F6FBFC" stroke="url(#navCore)" stroke-width="7"/>
+    <circle cx="230" cy="410" r="14" fill="#F6FBFC" stroke="url(#navCore)" stroke-width="7"/>
+
+    <path d="M-8 182L-46 232L-8 282" stroke="#11BFD6" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M468 182L506 232L468 282" stroke="#11BFD6" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <g transform="translate(500 106)">
+    <text x="0" y="84" font-family="'Noto Sans SC', 'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="94" font-weight="800" letter-spacing="6" fill="#0B2238">
+      瓦肯编程
+    </text>
+    <text x="2" y="154" font-family="'Trebuchet MS', 'Segoe UI', sans-serif" font-size="46" font-weight="800" letter-spacing="8" fill="#177A92">
+      VULCODING
+    </text>
+    <text x="2" y="214" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif" font-size="26" font-weight="700" letter-spacing="2.6" fill="#6D8792">
+      YOUNG CODERS · SHARP MINDS
+    </text>
+  </g>
+</svg>

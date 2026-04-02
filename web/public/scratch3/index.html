@@ -5,7 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="google" value="notranslate">
-  <link rel="shortcut icon" href="static/favicon.ico" />
+  <link rel="icon" type="image/svg+xml" href="../logo/vulcoding_logo_square.svg" />
+  <link rel="shortcut icon" href="../logo/vulcoding_logo_square.svg" />
   <link rel="stylesheet" href="../css/scratch.css" />
   <title>在线图形化编程</title>
   <script async src="//api.paas.plus/js/errlog.js"></script>
@@ -63,6 +64,32 @@
       }else{
         alert("上传失败：" + res.message)
       }
+    }
+
+    function applyScratchLogoStyle() {
+      var logoImg = document.querySelector('img[src*="vulcoding_logo_horizontal_nav.svg"]')
+      if (!logoImg) return false
+      logoImg.style.height = '34px'
+      logoImg.style.width = 'auto'
+      logoImg.style.maxWidth = '140px'
+      logoImg.style.objectFit = 'contain'
+      var logoItem = logoImg.parentElement
+      if (logoItem) {
+        logoItem.style.width = '160px'
+        logoItem.style.paddingRight = '12px'
+      }
+      return true
+    }
+
+    function ensureScratchLogoStyle() {
+      if (applyScratchLogoStyle()) return
+      var retryCount = 0
+      var timer = setInterval(function () {
+        retryCount++
+        if (applyScratchLogoStyle() || retryCount > 20) {
+          clearInterval(timer)
+        }
+      }, 300)
     }
 
     window.scratchConfig = {
@@ -217,11 +244,14 @@
       handleVmInitialized: (vm) => {
         window.vm = vm
         console.log("VM初始化完毕")
+        ensureScratchLogoStyle()
       },
       handleProjectLoaded: () => {
         console.log("作品载入完毕")
+        ensureScratchLogoStyle()
       },
       handleDefaultProjectLoaded: () => {
+        ensureScratchLogoStyle()
         //默认作品加载完毕
         if(workFileUrl){
           window.scratch.loadProject(workFileUrl, () => {
@@ -456,6 +486,7 @@
     $('.release-success').hide()
     $('.release-false').hide()
   })
+  ensureScratchLogoStyle()
 </script>
 
 </html>

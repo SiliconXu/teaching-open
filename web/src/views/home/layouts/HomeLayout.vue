@@ -49,6 +49,7 @@ import Vue from 'vue'
 import { getAction, getFileAccessHttpUrl } from '@/api/manage'
 import { ACCESS_TOKEN } from '@/store/mutation-types'
 import { mapActions, mapGetters } from 'vuex'
+import { DEFAULT_BRAND_ICON, DEFAULT_BRAND_LOGO } from '@/constants/branding'
 import Header from '../modules/Header'
 import Banner from '../modules/Banner'
 import Footer from '../modules/Footer'
@@ -65,9 +66,9 @@ export default {
   data() {
     return {
       brandName: this.$store.getters.sysConfig.brandName,
-      logo: '/logo.png',
-      logo2: '/logo.png',
-      avatarUrl: '/logo.png',
+      logo: DEFAULT_BRAND_LOGO,
+      logo2: DEFAULT_BRAND_ICON,
+      avatarUrl: DEFAULT_BRAND_ICON,
       token: '',
       sysConfig: {},
     }
@@ -80,7 +81,7 @@ export default {
     }
     if (this.$store.getters.sysConfig.logo2 && this.$store.getters.sysConfig.qiniuDomain) {
       this.logo2 = this.$store.getters.sysConfig.qiniuDomain + '/' + this.$store.getters.sysConfig.logo2
-      this.avatarUrl = this.logo
+      this.avatarUrl = this.logo2
     }
     if (this.$store.getters.sysConfig.avatar && this.$store.getters.sysConfig.qiniuDomain) {
       this.avatarUrl = this.$store.getters.sysConfig.qiniuDomain + '/' + this.$store.getters.sysConfig.avatar
