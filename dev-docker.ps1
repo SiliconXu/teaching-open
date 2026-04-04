@@ -15,6 +15,7 @@ $ComposeFile = Join-Path $DeployDir 'docker-compose.yml'
 $ApiBuilderImage = 'teaching-open-api-builder'
 $ApiBaseImage = 'teaching-open-local-maven8:latest'
 $ApiBaseSource = 'maven:3.8-openjdk-8-slim'
+$ApiMavenCacheVolume = 'teaching-open-m2-cache'
 $ApiRuntimeImage = 'registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-api:latest'
 $ApiRuntimeBaseImage = 'teaching-open-local-openjdk8:latest'
 $ApiRuntimeBaseSource = 'eclipse-temurin:8-jre-jammy'
@@ -22,6 +23,7 @@ $ApiRuntimeBaseSource = 'eclipse-temurin:8-jre-jammy'
 $WebBuilderImage = 'teaching-open-web-builder'
 $WebBaseImage = 'teaching-open-local-node16:latest'
 $WebBaseSource = 'node:16'
+$WebNpmCacheVolume = 'teaching-open-npm-cache'
 $WebRuntimeImage = 'registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-web:latest'
 $WebRuntimeBaseImage = 'teaching-open-local-nginx:latest'
 $WebRuntimeBaseSource = 'nginx:latest'
@@ -63,6 +65,13 @@ function Pull-And-Tag {
     Invoke-Checked 'docker' @('tag', $Source, $Target)
 }
 
+function Ensure-Volume {
+    param([string]$Name)
+
+    Write-Step "Ensuring Docker volume $Name"
+    Invoke-Checked 'docker' @('volume', 'create', $Name)
+}
+
 function Start-Infra {
     Write-Step 'Starting db and redis'
     Invoke-Checked 'docker' @('compose', '-f', $ComposeFile, 'up', '-d', 'db', 'redis')
@@ -80,10 +89,13 @@ function Build-Backend {
         $ApiDir
     )
 
+    Ensure-Volume -Name $ApiMavenCacheVolume
+
     Write-Step 'Packaging backend jar'
     Invoke-Checked 'docker' @(
         'run', '--rm',
         '-v', "${ApiDir}:/workspace",
+        '-v', "${ApiMavenCacheVolume}:/root/.m2",
         '-w', '/workspace',
         $ApiBuilderImage,
         'bash', '-lc', 'mvn clean package'
@@ -113,13 +125,16 @@ function Build-Frontend {
         $WebDir
     )
 
+    Ensure-Volume -Name $WebNpmCacheVolume
+
     Write-Step 'Installing frontend dependencies and building dist'
     Invoke-Checked 'docker' @(
         'run', '--rm',
         '-v', "${WebDir}:/workspace",
+        '-v', "${WebNpmCacheVolume}:/root/.npm",
         '-w', '/workspace',
         $WebBuilderImage,
-        'bash', '-lc', 'npm ci --legacy-peer-deps && npm run build'
+        'bash', '-lc', 'npm ci --cache /root/.npm --legacy-peer-deps && npm run build'
     )
 
     Pull-And-Tag -Source $WebRuntimeBaseSource -Target $WebRuntimeBaseImage

@@ -142,6 +142,11 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin d
 sudo usermod -aG docker $USER
 ```
 
+注意：
+
+- 执行完 `sudo usermod -aG docker $USER` 后，需要退出当前 SSH 会话并重新登录一次
+- 否则当前 shell 不会立即拿到新的 `docker` 组权限，后面执行 `docker build`、`docker compose` 时可能会报 `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`
+
 如果这里出现类似下面的错误：
 
 ```text
@@ -162,6 +167,51 @@ sudo systemctl enable --now docker
 sudo usermod -aG docker $USER
 ```
 
+注意：
+
+- 执行完 `sudo usermod -aG docker $USER` 后，需要退出当前 SSH 会话并重新登录一次
+- 否则当前 shell 不会立即拿到新的 `docker` 组权限，后面执行 `docker build`、`docker compose` 时可能会报 `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`
+
+### 3.2 配置 Docker 镜像源
+
+如果你的 VM 访问 Docker Hub 较慢，建议先配置镜像加速源，再继续后面的 `docker pull` 和 `docker build`。
+
+这里以 `DaoCloud` 为例：
+
+```bash
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json > /dev/null <<'EOF'
+{
+  "registry-mirrors": [
+    "https://docker.m.daocloud.io"
+  ]
+}
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+验证是否生效：
+
+```bash
+docker info
+```
+
+确认输出中包含类似：
+
+```text
+Registry Mirrors:
+ https://docker.m.daocloud.io/
+```
+
+说明：
+
+- 这一步是给 Docker daemon 配置镜像加速源
+- 配好之后，后面的 `docker build` 和 `docker pull` 会优先通过这个镜像源去获取基础镜像
+- 如果你的 `/etc/docker/daemon.json` 已经有其他配置，不要直接覆盖，要把 `registry-mirrors` 合并进去
+
+### 3.3 检查 Docker 是否可用
+
 执行完后重新登录服务器，再检查：
 
 ```bash
@@ -169,12 +219,19 @@ docker --version
 docker compose version
 ```
 
+说明：
+
+- 这套迁移方案里，MySQL 和 Redis 都是通过 Docker 容器运行的
+- 因此在 VM 宿主机上**不需要再单独安装 Linux 系统级的 MySQL 软件包**
+- 但如果你要运行 `db` 服务，仍然需要准备一个可用的 `MySQL 8` Docker 镜像
+- 后面你看到的 `db` 服务，本质上就是一个 MySQL 8 容器
+
 确认：
 
 - [ ] Docker 可用
 - [ ] `docker compose` 可用
 
-### 3.2 给 GitHub 仓库添加 Deploy Key
+### 3.4 给 GitHub 仓库添加 Deploy Key
 
 如果你的代码仓库是私有仓库，推荐在这台 VM 上生成一把专门用于部署的 SSH key，然后把公钥加到 GitHub 仓库的 `Deploy keys`。
 
@@ -235,7 +292,7 @@ ssh -T git@github.com
 - 如果同一台 VM 需要访问多个私有仓库，建议每个仓库生成一把独立 key，再用 `~/.ssh/config` 配不同的 `Host` 别名
 - 如果你不想用 deploy key，也可以改用 HTTPS + Personal Access Token，但长期部署通常还是 SSH 更省事
 
-### 3.3 拉取代码
+### 3.5 拉取代码
 
 ```bash
 cd /opt
@@ -270,13 +327,13 @@ nano deploy/.env
 至少改这些值：
 
 ```dotenv
-JEECG_DOMAIN=https://你的测试域名
+JEECG_DOMAIN=http://scratch2.vulcan-code.top:4080
 
 MYSQL_HOST=db
 MYSQL_PORT=3306
 MYSQL_DATABASE=teachingopen
 MYSQL_USER=teachingopen
-MYSQL_PASSWORD=改成强密码
+MYSQL_PASSWORD=Dragon#1
 
 REDIS_HOST=redis
 REDIS_PORT=6379
@@ -285,10 +342,10 @@ REDIS_DATABASE=0
 
 UPLOAD_TYPE=qiniu
 
-QINIU_ACCESS_KEY=你的七牛AK
-QINIU_SECRET_KEY=你的七牛SK
-QINIU_BUCKET=你的七牛bucket
-QINIU_STATICDOMAIN=https://你的七牛访问域名
+QINIU_ACCESS_KEY=hx8dX89C13lJb26AjEj_fFHqcJHOqPiHpSezrxWY
+QINIU_SECRET_KEY=v1QAU_zDjESEwQKL0tKiyQdjBHFVEv6Y6rLQxzBX
+QINIU_BUCKET=vulcan-scratch
+QINIU_STATICDOMAIN=//qiniu.vucoding.top
 QINIU_AREA=z0
 ```
 
@@ -300,96 +357,254 @@ QINIU_AREA=z0
 
 ---
 
-## 5. 决定镜像来源
+## 5. 改用“本地构建，VM 只封装运行镜像”
 
-你有两种方式：
+从这一节开始，推荐你不要在 VM 上做重量级编译，而是在本地开发机先把构建产物准备好，再上传到 VM。
 
-### 方式 A：直接使用已有镜像
+这样做的好处：
 
-适合你暂时不需要编译自己的修改版本。
+- VM 不需要跑 `mvn clean package`
+- VM 不需要跑 `npm ci` 和 `npm run build`
+- 更省 VM 的 CPU、内存、磁盘 IO
+- 本地失败更容易调试，部署时更稳定
 
-优点：
+首次执行这套流程时，可以按下面的顺序理解：
 
-- 快
-- 适合先验证迁移链路
+- 本地负责生成后端 Jar 和前端 `dist`
+- VM 负责保存代码、环境变量、运行容器
+- VM 上只构建运行镜像，不再承担 Maven / npm 的完整编译过程
 
-缺点：
+这里的“本地构建”默认是指：
 
-- 如果你有二次开发代码，未必包含在这些镜像里
+- 本机安装 `Docker Desktop`
+- 通过 Docker 容器完成 Maven 和 npm 构建
+- 本机不强制要求安装 `Java`、`Maven`、`Node.js`
 
-### 方式 B：在新 VM 上构建你自己的镜像
+本节中的本地示例命令，默认对应仓库现有的本地开发方式：
 
-适合你已经改了代码，准备部署自己的版本。
+- 本地系统：`Windows`
+- 本地终端：`PowerShell`
+- 项目目录：`D:\ext-dev\teaching-open`
 
-我更推荐你用这个方式。
+如果你本地就是按仓库里的隔离开发方式在跑，可以直接参考：
+
+- [LOCAL_DOCKER_SETUP.md](/D:/ext-dev/teaching-open/LOCAL_DOCKER_SETUP.md)
+- [dev-docker.ps1](/D:/ext-dev/teaching-open/dev-docker.ps1)
+
+补充说明：
+
+- 首次本地构建时，Docker 可能需要拉取 `maven`、`node`、`nginx`、`mysql` 这类基础镜像
+- 这些基础镜像第一次拉取成功后，后续通常会被本地 Docker 直接复用
+- 之前配置好的 `teaching-open-m2-cache` 和 `teaching-open-npm-cache` 也会继续复用
+- 所以后面更新 app 时，通常只需要重新编译产物并重建你自己的运行镜像，不需要每次重新拉取全部基础镜像
 
 ---
 
-## 6. 构建自己的 Docker 镜像
+## 6. 本地构建产物，并在 VM 上封装运行镜像
 
-以下命令在新 VM 上执行：
+本节分成两部分：
 
-```bash
-cd /opt/teaching-open
+1. 在本地开发机构建产物
+2. 把产物传到 VM，然后只在 VM 上构建运行镜像
+
+### 6.1 在本地开发机准备后端编译容器
+
+以下命令在本地开发机执行。
+
+如果你本地是 Windows + Docker Desktop，直接在仓库根目录的 `PowerShell` 中执行：
+
+```powershell
+cd D:\ext-dev\teaching-open
+docker pull maven:3.8-openjdk-8-slim
+docker tag maven:3.8-openjdk-8-slim teaching-open-local-maven8:latest
+docker build `
+  --build-arg BASE_IMAGE=teaching-open-local-maven8:latest `
+  -t teaching-open-api-builder `
+  -f .\api\Dockerfile.builder .\api
 ```
 
-### 6.1 构建数据库初始化镜像
+说明：
 
-```bash
-docker build -t teaching-open-db:latest -f api/Dockerfile.db api
-```
+- 这个 builder 镜像里已经预置了 Maven `settings.xml`，会优先使用阿里云公共 Maven 仓库镜像来加速访问 `central`
+- 如果你刚更新过代码，记得先重新构建这个后端 builder 镜像，再执行下一步后端打包
 
-### 6.2 构建后端编译镜像
+### 6.2 在本地开发机通过 Docker 编译后端 Jar
 
-```bash
-docker build -t teaching-open-api-builder:latest -f api/Dockerfile.builder api
-```
-
-### 6.3 编译后端 Jar
-
-```bash
-docker run --rm \
-  -v "$PWD/api:/workspace" \
-  -w /workspace \
-  teaching-open-api-builder:latest \
+```powershell
+cd D:\ext-dev\teaching-open
+docker volume create teaching-open-m2-cache
+docker run --rm `
+  -v "D:\ext-dev\teaching-open\api:/workspace" `
+  -v teaching-open-m2-cache:/root/.m2 `
+  -w /workspace `
+  teaching-open-api-builder `
   bash -lc "mvn clean package"
 ```
 
-确认：
+说明：
 
-- [ ] 已生成 `api/jeecg-boot-module-system/target/teaching-open-2.8.0.jar`
+- `teaching-open-m2-cache` 会缓存 Maven 依赖
+- 以后重复构建时，可以直接复用这个 Docker volume，避免每次重新下载全部依赖
+- 这里生成的必须是 Spring Boot 可执行 jar；如果后面启动 `api` 容器时报 `no main manifest attribute, in app.jar`，说明当前 jar 不是可执行包，需要同步最新代码并重新构建后端 jar
 
-### 6.4 构建后端运行镜像
+确认本地已生成：
 
-```bash
-docker build -t teaching-open-api:latest -f api/Dockerfile api
-```
+- [ ] `api/jeecg-boot-module-system/target/teaching-open-2.8.0.jar`
 
-### 6.5 构建前端编译镜像
-
-```bash
-docker build -t teaching-open-web-builder:latest -f web/Dockerfile.builder web
-```
-
-### 6.6 编译前端
+### 6.3 在本地开发机准备前端编译容器
 
 这个老项目建议用 `npm`，不要用 `yarn`。
 
-```bash
-docker run --rm \
-  -v "$PWD/web:/workspace" \
-  -w /workspace \
-  teaching-open-web-builder:latest \
-  bash -lc "npm ci --legacy-peer-deps && npm run build"
+```powershell
+cd D:\ext-dev\teaching-open
+docker pull node:16
+docker tag node:16 teaching-open-local-node16:latest
+docker build `
+  --build-arg BASE_IMAGE=teaching-open-local-node16:latest `
+  -t teaching-open-web-builder `
+  -f .\web\Dockerfile.builder .\web
 ```
 
-确认：
+说明：
 
-- [ ] 已生成 `web/dist`
+- 这个 builder 镜像里已经把 `npm` 和 `yarn` 的 registry 配到了 `https://registry.npmmirror.com`
+- 如果你刚更新过代码，记得先重新构建这个前端 builder 镜像，再执行下一步前端编译
 
-### 6.7 构建前端运行镜像
+### 6.4 在本地开发机通过 Docker 编译前端静态文件
+
+```powershell
+cd D:\ext-dev\teaching-open
+docker volume create teaching-open-npm-cache
+docker run --rm `
+  -v "D:\ext-dev\teaching-open\web:/workspace" `
+  -v teaching-open-npm-cache:/root/.npm `
+  -w /workspace `
+  teaching-open-web-builder `
+  bash -lc "npm ci --cache /root/.npm --legacy-peer-deps && npm run build"
+```
+
+说明：
+
+- `teaching-open-npm-cache` 会缓存 npm 下载包
+- `npm ci` 仍然会重建 `node_modules`，但不会每次都从网络重新拉取全部依赖
+
+确认本地已生成：
+
+- [ ] `web/dist`
+
+### 6.5 在 VM 上为构建产物准备目录
+
+如果你前面已经在 VM 上 `git clone` 了仓库源码，那么大部分源码目录都已经存在。
+
+通常只需要确保后端 `target` 目录存在，方便上传 Jar：
 
 ```bash
+cd /opt/teaching-open
+mkdir -p api/jeecg-boot-module-system/target
+```
+
+说明：
+
+- `web/` 目录通常会随着 `git clone` 一起带下来，不需要额外创建
+- 这里的 `mkdir -p` 只是兜底操作，即使目录已存在也不会报错
+
+### 6.6 把本地构建产物上传到 VM
+
+下面给一个最直接的 `scp` 示例。以下命令在你的本地开发机执行：
+
+```bash
+scp -P <ssh-port> api/jeecg-boot-module-system/target/teaching-open-2.8.0.jar <vm-user>@<vm-host>:/opt/teaching-open/api/jeecg-boot-module-system/target/
+scp -P <ssh-port> -r web/dist <vm-user>@<vm-host>:/opt/teaching-open/web/
+```
+按照当前服务器配置：
+```bash
+scp -P 8922 api/jeecg-boot-module-system/target/teaching-open-2.8.0.jar siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/api/jeecg-boot-module-system/target/
+scp -P 8922 -r web/dist siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/web/
+```
+
+说明：
+
+- `-P` 后面填写的是 SSH 端口号，例如 `-P 8922`
+- `-P` 必须是大写，小写 `-p` 不是指定端口的意思
+
+如果你不方便用 `scp`，也可以用：
+
+- `rsync`
+- `WinSCP`
+- 先打包成 zip 再上传解压
+
+不建议把这些构建产物直接提交到 GitHub 再让 VM `git pull`，原因是：
+
+- `api/jeecg-boot-module-system/target` 本来就在 [.gitignore](/D:/ext-dev/teaching-open/.gitignore) 中
+- `web/dist` 现在也已经加入了 [.gitignore](/D:/ext-dev/teaching-open/.gitignore)
+- `jar` 和 `dist` 都属于构建产物，不适合作为日常源码提交的一部分
+- 把二进制产物提交进仓库会让仓库历史变大，也容易让代码提交记录变得混乱
+
+更推荐的做法是：
+
+- 源码继续正常 `git push` / `git pull`
+- `jar` 和 `web/dist` 作为构建产物，单独上传到 VM
+- 如果后面你想把流程再规范一些，可以再演进成“本地构建镜像后推送到镜像仓库，VM 直接拉镜像”
+
+可以把这条原则理解成：
+
+- Git 仓库保存“源码、配置、脚本、Dockerfile”
+- VM 部署时额外接收“本地刚构建出来的 `jar` 和 `dist`”
+- 不把生成结果混进日常源码提交
+
+上传完成后，在 VM 上确认：
+
+- [ ] `/opt/teaching-open/api/jeecg-boot-module-system/target/teaching-open-2.8.0.jar` 存在
+- [ ] `/opt/teaching-open/web/dist` 存在
+
+### 6.7 在 VM 上构建数据库初始化镜像
+
+这一步的作用，是把仓库里的初始化 SQL 打进一个 MySQL 8 镜像里。
+
+```bash
+cd /opt/teaching-open
+docker build -t teaching-open-db:latest -f api/Dockerfile.db api
+```
+
+说明：
+
+- 这一步**不是在 VM 宿主机安装 MySQL**
+- 它只是基于 `mysql:8.0` 基础镜像，封装一个带初始化 SQL 的数据库镜像
+- 如果 VM 本地还没有 `mysql:8.0` 基础镜像，`docker build` 会自动尝试拉取
+- 如果这里报 `failed to resolve source metadata for docker.io/library/mysql:8.0` 或 `i/o timeout`，本质上是 VM 到镜像仓库的网络超时，不是 SQL 文件本身有问题
+
+如果你**没有改过数据库初始化 SQL**，更推荐的做法是：
+
+- 直接跳过这一步
+- 继续构建 `api` 和 `web` 运行镜像
+- 在 `docker-compose.yml` 里让 `db` 继续使用原来的预构建镜像
+
+只有在下面这些情况，才建议坚持自己构建 `teaching-open-db:latest`：
+
+- 你修改了 `api/db/` 里的初始化 SQL
+- 你不想依赖原来的预构建数据库镜像
+
+### 6.8 在 VM 上构建后端运行镜像
+
+`api/Dockerfile` 只会把已经生成好的 Jar 打进镜像，不会在 VM 上重新编译 Java 代码。
+
+说明：
+
+- `api/Dockerfile` 默认基础镜像已经改为 `eclipse-temurin:8-jre-jammy`
+- 不再使用容易失败的 `openjdk:8`
+- 因此这里直接执行普通的 `docker build` 即可
+
+```bash
+cd /opt/teaching-open
+docker build -t teaching-open-api:latest -f api/Dockerfile api
+```
+
+### 6.9 在 VM 上构建前端运行镜像
+
+`web/Dockerfile` 只会把已经生成好的 `dist` 打进 Nginx 镜像，不会在 VM 上重新执行 `npm build`。
+
+```bash
+cd /opt/teaching-open
 docker build -t teaching-open-web:latest -f web/Dockerfile web
 ```
 
@@ -401,20 +616,19 @@ docker build -t teaching-open-web:latest -f web/Dockerfile web
 
 - [deploy/docker-compose.yml](/D:/ext-dev/teaching-open/deploy/docker-compose.yml)
 
-建议在新 VM 上先备份，再把镜像名改成你本地刚构建的名字：
+建议在新 VM 上先备份，再按你的实际情况调整镜像名：
 
 ```bash
 cp deploy/docker-compose.yml deploy/docker-compose.yml.backup
 nano deploy/docker-compose.yml
 ```
 
-把这些镜像名改掉：
+默认更推荐只改 `api` 和 `web`，`db` 继续沿用原文件里的预构建镜像。
+
+推荐写法：
 
 ```yaml
 services:
-  db:
-    image: teaching-open-db:latest
-
   api:
     image: teaching-open-api:latest
 
@@ -422,13 +636,22 @@ services:
     image: teaching-open-web:latest
 ```
 
+如果你前面已经成功执行了 `6.7`，并且确实构建出了本地数据库镜像，再把 `db` 改成：
+
+```yaml
+services:
+  db:
+    image: teaching-open-db:latest
+```
+
 Redis 可以继续用原文件里的镜像。
 
 确认：
 
-- [ ] `db` 使用 `teaching-open-db:latest`
 - [ ] `api` 使用 `teaching-open-api:latest`
 - [ ] `web` 使用 `teaching-open-web:latest`
+- [ ] 如果你跳过了 `6.7`，`db` 继续使用原文件里的镜像
+- [ ] 如果你执行了 `6.7`，`db` 使用 `teaching-open-db:latest`
 
 ---
 
@@ -470,6 +693,64 @@ cat teachingopen_backup_*.sql | docker exec -i teachingopen_db mysql -uroot -pte
 ```
 
 如果你改过 `MYSQL_ROOT_PASSWORD`，把命令里的密码替换掉。
+
+重要说明：
+
+- 当前 `db` 镜像在“全新数据目录首次启动”时，可能会自动执行镜像内自带的初始化 SQL
+- 所以如果你是要恢复“旧环境完整备份”，不能直接往这个已经初始化过的库里继续导入
+- 更稳的做法是：先把目标库删掉并重建成空库，再导入你的旧备份
+
+参考命令：
+
+```bash
+docker exec -i teachingopen_db mysql -uroot -pteachingopen -e "DROP DATABASE IF EXISTS teachingopen; CREATE DATABASE teachingopen CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+```
+
+如果导入时出现类似下面的错误：
+
+```text
+ERROR 1118 (42000): Row size too large (> 8126)
+```
+
+通常说明旧库导出的建表语句里带有较老的 InnoDB 行格式定义，导入到新的 MySQL 8 环境时触发了行大小限制。
+
+推荐处理方式：
+
+1. 先备份原始导出文件
+2. 在导入前把 SQL 文件里的 `ROW_FORMAT=COMPACT` 或 `ROW_FORMAT=REDUNDANT` 替换成 `ROW_FORMAT=DYNAMIC`
+3. 清空新环境里这次失败导入产生的残留数据后，再重新导入
+
+参考命令：
+
+```bash
+cd /opt/teaching-open
+cp teachingopen_backup_*.sql teachingopen_backup_fixed.sql
+sed -i -E 's/ROW_FORMAT=(COMPACT|REDUNDANT)/ROW_FORMAT=DYNAMIC/g' teachingopen_backup_fixed.sql
+```
+
+如果这是一个全新的迁移环境、当前库里还没有任何你需要保留的数据，可以先重置数据库数据目录再重新导入：
+
+```bash
+cd /opt/teaching-open/deploy
+docker compose down
+sudo rm -rf data/mysql/*
+docker compose up -d db
+```
+
+然后重新导入修正后的 SQL：
+
+```bash
+cd /opt/teaching-open
+docker exec -i teachingopen_db mysql -uroot -pteachingopen -e "DROP DATABASE IF EXISTS teachingopen; CREATE DATABASE teachingopen CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+cat teachingopen_backup_fixed.sql | docker exec -i teachingopen_db mysql -uroot -pteachingopen teachingopen
+```
+
+注意：
+
+- `rm -rf data/mysql/*` 只适用于“新的迁移环境、导入失败后准备重来”的场景
+- 如果这台新 VM 上已经有你要保留的数据，不要直接清空数据目录
+- 如果替换后仍然报错，再检查导出文件对应报错位置附近是否还有其他显式的表选项需要调整
+- 如果出现 `Duplicate entry ... for key ... PRIMARY`，通常说明你把旧备份导入到了一个已经初始化过、或已经部分导入过的数据里，需要先删库重建空库再导入
 
 导入完成后检查：
 

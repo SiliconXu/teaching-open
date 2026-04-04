@@ -127,10 +127,28 @@ docker build `
   -f .\api\Dockerfile.builder .\api
 ```
 
+说明：
+
+- `maven:3.8-openjdk-8-slim` 这类基础镜像第一次拉取成功后，后续通常会被本地 Docker 直接复用
+- 只有在你手动删除镜像、主动 `docker pull` 新版本，或清理 Docker 本地缓存时，才需要重新拉取
+- 这个 builder 镜像里已经预置了 Maven `settings.xml`，会优先使用阿里云公共 Maven 仓库镜像来加速访问 `central`
+- 如果你刚更新过代码，记得先重新执行这一步，再跑后端构建命令
+
 ## 4. 编译后端源码
 
+为了避免每次都重新下载 Maven 依赖，先创建一个本地 Docker volume 缓存：
+
 ```powershell
-docker run --rm -v "D:\ext-dev\teaching-open\api:/workspace" -w /workspace teaching-open-api-builder bash -lc "mvn clean package"
+docker volume create teaching-open-m2-cache
+```
+
+```powershell
+docker run --rm `
+  -v "D:\ext-dev\teaching-open\api:/workspace" `
+  -v teaching-open-m2-cache:/root/.m2 `
+  -w /workspace `
+  teaching-open-api-builder `
+  bash -lc "mvn clean package"
 ```
 
 编译成功后会生成：
@@ -138,6 +156,11 @@ docker run --rm -v "D:\ext-dev\teaching-open\api:/workspace" -w /workspace teach
 ```text
 api\jeecg-boot-module-system\target\teaching-open-2.8.0.jar
 ```
+
+说明：
+
+- `api\jeecg-boot-module-system\target` 属于构建产物目录，默认不提交到 Git
+- 日常提交时只提交源码和配置变更，不提交生成出来的 `jar`
 
 ## 5. 构建后端运行镜像
 
@@ -192,6 +215,11 @@ docker build `
   -f .\web\Dockerfile.builder .\web
 ```
 
+说明：
+
+- 这个 builder 镜像里已经把 `npm` 和 `yarn` 的 registry 配到了 `https://registry.npmmirror.com`
+- 如果你刚拉了最新代码，记得先重新执行这一步，再跑前端构建命令
+
 ## 7. 编译前端源码
 
 使用 `npm`，不要使用 `yarn`。
@@ -206,14 +234,32 @@ docker build `
 执行：
 
 ```powershell
-docker run --rm -v "D:\ext-dev\teaching-open\web:/workspace" -w /workspace teaching-open-web-builder bash -lc "npm ci --legacy-peer-deps && npm run build"
+docker volume create teaching-open-npm-cache
+docker run --rm `
+  -v "D:\ext-dev\teaching-open\web:/workspace" `
+  -v teaching-open-npm-cache:/root/.npm `
+  -w /workspace `
+  teaching-open-web-builder `
+  bash -lc "npm ci --cache /root/.npm --legacy-peer-deps && npm run build"
 ```
+
+说明：
+
+- `teaching-open-m2-cache` 用来缓存 Maven 依赖
+- `teaching-open-npm-cache` 用来缓存 npm 下载包
+- 后续重复构建时可以直接复用这两个 Docker volume，不需要每次重新下载全部依赖
+- 所以后续更新 app 时，通常只需要重新编译和重新构建你自己的镜像，不需要每次重新拉取 Maven / Node / Nginx / MySQL 这些基础镜像
 
 编译成功后会生成：
 
 ```text
 web\dist
 ```
+
+说明：
+
+- `web\dist` 属于前端构建产物目录，默认不提交到 Git
+- 日常提交时只提交源码和配置变更，不提交生成出来的静态文件
 
 ## 8. 构建前端运行镜像
 
@@ -273,7 +319,12 @@ docker compose -f .\deploy\docker-compose.yml up -d api web
 重新编译后端：
 
 ```powershell
-docker run --rm -v "D:\ext-dev\teaching-open\api:/workspace" -w /workspace teaching-open-api-builder bash -lc "mvn clean package"
+docker run --rm `
+  -v "D:\ext-dev\teaching-open\api:/workspace" `
+  -v teaching-open-m2-cache:/root/.m2 `
+  -w /workspace `
+  teaching-open-api-builder `
+  bash -lc "mvn clean package"
 ```
 
 重新构建后端运行镜像：
@@ -296,7 +347,12 @@ docker compose -f .\deploy\docker-compose.yml up -d --force-recreate api
 重新编译前端：
 
 ```powershell
-docker run --rm -v "D:\ext-dev\teaching-open\web:/workspace" -w /workspace teaching-open-web-builder bash -lc "npm ci --legacy-peer-deps && npm run build"
+docker run --rm `
+  -v "D:\ext-dev\teaching-open\web:/workspace" `
+  -v teaching-open-npm-cache:/root/.npm `
+  -w /workspace `
+  teaching-open-web-builder `
+  bash -lc "npm ci --cache /root/.npm --legacy-peer-deps && npm run build"
 ```
 
 重新构建前端运行镜像：
