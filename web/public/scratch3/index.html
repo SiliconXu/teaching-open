@@ -92,6 +92,60 @@
       }, 300)
     }
 
+    function isBackpackRequestUrl(url) {
+      if (!url) return false
+      var requestUrl = String(url)
+      return requestUrl.indexOf('/api/teaching/scratch/backpack') >= 0
+    }
+
+    function installBackpackAuthBridge() {
+      if (!userToken) return
+
+      if (window.fetch && !window.__scratchBackpackFetchPatched) {
+        var originalFetch = window.fetch.bind(window)
+        window.fetch = function (input, init) {
+          var requestUrl = input && input.url ? input.url : input
+          if (!isBackpackRequestUrl(requestUrl)) {
+            return originalFetch(input, init)
+          }
+
+          var nextInit = init ? Object.assign({}, init) : {}
+          var headers = new Headers(nextInit.headers || (input && input.headers) || {})
+          if (!headers.has('X-Access-Token')) {
+            headers.set('X-Access-Token', userToken)
+          }
+          nextInit.headers = headers
+          return originalFetch(input, nextInit)
+        }
+        window.__scratchBackpackFetchPatched = true
+      }
+
+      if (window.XMLHttpRequest && !window.__scratchBackpackXhrPatched) {
+        var originalOpen = XMLHttpRequest.prototype.open
+        var originalSend = XMLHttpRequest.prototype.send
+
+        XMLHttpRequest.prototype.open = function (method, url) {
+          this.__scratchRequestUrl = url
+          return originalOpen.apply(this, arguments)
+        }
+
+        XMLHttpRequest.prototype.send = function () {
+          if (isBackpackRequestUrl(this.__scratchRequestUrl)) {
+            try {
+              this.setRequestHeader('X-Access-Token', userToken)
+            } catch (e) {
+              console.warn('scratch backpack auth header inject failed', e)
+            }
+          }
+          return originalSend.apply(this, arguments)
+        }
+
+        window.__scratchBackpackXhrPatched = true
+      }
+    }
+
+    installBackpackAuthBridge()
+
     window.scratchConfig = {
       session: {
         token: userToken,
