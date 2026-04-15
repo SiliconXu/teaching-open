@@ -48,6 +48,7 @@ import org.jeecgframework.poi.excel.entity.ImportParams;
 import org.jeecgframework.poi.excel.view.JeecgEntityExcelView;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
@@ -98,6 +99,8 @@ public class TeachingWorkController extends BaseController {
 	 private ITeachingAdditionalWorkService teachingAdditionalWorkService;
 	 @Autowired
 	 private ITeachingCourseUnitService teachingCourseUnitService;
+	 @Autowired
+	 private JdbcTemplate jdbcTemplate;
 
 	 @GetMapping("userInfo")
 	 public Result<?> getUserInfo(@RequestParam String userId){
@@ -160,32 +163,82 @@ public class TeachingWorkController extends BaseController {
 	  */
 	 @ApiOperation(value = "我的附加作业", notes = "获取我的附加作业")
 	 @GetMapping("mineAdditionalWork")
-	 public DictResult<List<AdditionalWorkModel>> mineAdditionalWork(
+	 public DictResult<List<Map<String, Object>>> mineAdditionalWork(
 			 @RequestParam(required = false) String departId,
 			 @RequestParam(required = false) Boolean submit,
 			 @RequestParam(required = false) Integer status) {
-		 DictResult<List<AdditionalWorkModel>> result = new DictResult<>();
+		 DictResult<List<Map<String, Object>>> result = new DictResult<>();
 		 String userId = getCurrentUser().getId();
 		 List<AdditionalWorkModel> list = teachingWorkService.userAdditionalWork(userId, departId, submit, status);
+		 List<Map<String, Object>> mapped = new ArrayList<>();
 		 for (AdditionalWorkModel work : list) {
-			 if (StringUtils.isNotBlank(work.getMineWorkUrl())){
+			 Map<String, Object> item = JSONObject.parseObject(JSONObject.toJSONString(work));
+			 TeachingAdditionalWork additionalWork = teachingAdditionalWorkService.getById(work.getAdditionalWorkId());
+			 String assignmentMode = additionalWork == null || StringUtils.isBlank(additionalWork.getAssignmentMode()) ? "file" : additionalWork.getAssignmentMode();
+			 item.put("assignmentMode", assignmentMode);
+			 if (StringUtils.isNotBlank(work.getMineWorkUrl())) {
 				 SysFile file = sysFileService.getById(work.getMineWorkUrl());
-				 if (file != null && StringUtils.isNotBlank(file.getFilePath())){
-					 work.setMineWorkUrl(QiniuConfig.domain + "/" + file.getFilePath());
+				 if (file != null && StringUtils.isNotBlank(file.getFilePath())) {
+					 item.put("mineWorkUrl", QiniuConfig.domain + "/" + file.getFilePath());
 				 }
 			 }
-			 if (StringUtils.isNotBlank(work.getMineWorkCover())){
+			 if (StringUtils.isNotBlank(work.getMineWorkCover())) {
 				 SysFile file = sysFileService.getById(work.getMineWorkCover());
-				 if (file != null && StringUtils.isNotBlank(file.getFilePath())){
-					 work.setMineWorkCover(QiniuConfig.domain + "/" + file.getFilePath());
+				 if (file != null && StringUtils.isNotBlank(file.getFilePath())) {
+					 item.put("mineWorkCover", QiniuConfig.domain + "/" + file.getFilePath());
 				 }
 			 }
-			 if(StringUtils.isNotBlank(work.getWorkDocumentUrl())){
-				 work.setWorkDocumentUrl(ow365Util.getFileUrlStr(work.getWorkDocumentUrl()));
+			 if (StringUtils.isNotBlank(work.getWorkDocumentUrl())) {
+				 item.put("workDocumentUrl", ow365Util.getFileUrlStr(work.getWorkDocumentUrl()));
 			 }
+			 if (StringUtils.equals("objective", assignmentMode)) {
+				 List<Map<String, Object>> homeworkRows = jdbcTemplate.queryForList(
+					 "select id, allow_redo, total_score from teaching_objective_homework where source_type=? and source_id=? limit 1",
+					 "additional", work.getAdditionalWorkId());
+				 if (!homeworkRows.isEmpty()) {
+					 Map<String, Object> homework = homeworkRows.get(0);
+					 item.put("allowRedo", toBool(homework.get("allow_redo")));
+					 item.put("objectiveTotalScore", toInteger(homework.get("total_score")));
+					 List<Map<String, Object>> submitRows = jdbcTemplate.queryForList(
+						 "select id, objective_score, right_count, question_count from teaching_objective_submit where homework_id=? and student_id=? and depart_id=? order by attempt_no desc, submitted_at desc, create_time desc limit 1",
+						 String.valueOf(homework.get("id")), userId, work.getDepartId());
+					 if (!submitRows.isEmpty()) {
+						 Map<String, Object> latest = submitRows.get(0);
+						 item.put("objectiveSubmitId", latest.get("id"));
+						 item.put("objectiveScore", toInteger(latest.get("objective_score")));
+						 item.put("objectiveRightCount", toInteger(latest.get("right_count")));
+						 item.put("objectiveQuestionCount", toInteger(latest.get("question_count")));
+						 item.put("mineWorkStatus", 1);
+					 } else {
+						 item.put("mineWorkStatus", null);
+					 }
+				 }
+			 }
+			 mapped.add(item);
 		 }
-		 result.setResult(list);
+		 result.setResult(mapped);
 		 return result;
+	 }
+
+	 private Integer toInteger(Object value) {
+		 if (value == null) {
+			 return null;
+		 }
+		 if (value instanceof Integer) {
+			 return (Integer) value;
+		 }
+		 return Integer.parseInt(String.valueOf(value));
+	 }
+
+	 private boolean toBool(Object value) {
+		 if (value == null) {
+			 return false;
+		 }
+		 if (value instanceof Boolean) {
+			 return (Boolean) value;
+		 }
+		 String normalized = String.valueOf(value);
+		 return StringUtils.equalsIgnoreCase(normalized, "1") || StringUtils.equalsIgnoreCase(normalized, "true");
 	 }
 
 	 /**

@@ -201,6 +201,24 @@
         required:false,
         default: true
       },
+      //是否压缩图片后上传
+      compressImage:{
+        type:Boolean,
+        required:false,
+        default: false
+      },
+      //图片压缩最大宽度
+      imageMaxWidth:{
+        type:Number,
+        required:false,
+        default: 1600
+      },
+      //图片压缩质量 0-1
+      imageQuality:{
+        type:Number,
+        required:false,
+        default: 0.82
+      },
     },
     watch:{
       value:{
@@ -400,31 +418,89 @@
       //上传之前
       beforeUpload(file){
         this.uploadGoOn=true
-        var fileType = file.type;
-        
-        if(this.fileType===FILE_TYPE_IMG){
-          if(fileType.indexOf('image')<0){
-            this.$message.warning('请上传图片');
-            this.uploadGoOn=false
-            return false;
+        return this.prepareUploadFile(file).then((uploadFile) => {
+          if(!uploadFile){
+            return false
           }
+          let suffix = uploadFile.name.split(".")
+          if(suffix.length>1){suffix = suffix.pop()}else{suffix = ""}
+          this.uploadKey[uploadFile.uid] = this.getFileFullName(suffix)
+          this.$emit("selected", this.uploadKey[uploadFile.uid], uploadFile);
+          switch(this.uploadTarget){
+            case UPLOAD_TARGET_QINIU:
+              return this.getQiniuToken().then(() => uploadFile);
+            default:
+              return uploadFile
+          }
+        }).catch(() => false)
+      },
+      prepareUploadFile(file){
+        var fileType = file.type || '';
+        if(this.fileType===FILE_TYPE_IMG && fileType.indexOf('image')<0){
+          this.$message.warning('请上传图片');
+          this.uploadGoOn=false
+          return Promise.resolve(false);
+        }
+        if(this.fileType===FILE_TYPE_IMG && this.compressImage && fileType.indexOf('image')>=0){
+          return this.compressImageFile(file).then((compressedFile) => {
+            if(compressedFile.size > this.maxFileSize * 1024 * 1024){
+              this.$message.warning('文件超过'+this.maxFileSize+'MB')
+              return false
+            }
+            return compressedFile
+          }).catch(() => {
+            this.$message.warning('图片压缩失败，请重试');
+            return false
+          })
         }
         if(file.size > this.maxFileSize * 1024 * 1024){
-          this.$message.warning("文件超过"+this.maxFileSize+"MB")
-          return false
+          this.$message.warning('文件超过'+this.maxFileSize+'MB')
+          return Promise.resolve(false)
         }
-        //获取文件key
-        let suffix = file.name.split(".")
-        if(suffix.length>1){suffix = suffix.pop()}else{suffix = ""}
-        this.uploadKey[file.uid] = this.getFileFullName(suffix)
-        this.$emit("selected", this.uploadKey[file.uid], file);
-        //获取上传token
-        switch(this.uploadTarget){
-          case UPLOAD_TARGET_QINIU:
-            return this.getQiniuToken();
-          default:
-            return true
-        }
+        return Promise.resolve(file)
+      },
+      compressImageFile(file){
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = (event) => {
+            const img = new Image()
+            img.onload = () => {
+              let width = img.width
+              let height = img.height
+              const maxWidth = this.imageMaxWidth > 0 ? this.imageMaxWidth : width
+              if(width > maxWidth){
+                const ratio = maxWidth / width
+                width = maxWidth
+                height = Math.round(height * ratio)
+              }
+              const canvas = document.createElement('canvas')
+              canvas.width = width
+              canvas.height = height
+              const ctx = canvas.getContext('2d')
+              ctx.fillStyle = '#ffffff'
+              ctx.fillRect(0, 0, width, height)
+              ctx.drawImage(img, 0, 0, width, height)
+              const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+              const quality = Math.min(1, Math.max(0.1, this.imageQuality || 0.82))
+              canvas.toBlob((blob) => {
+                if(!blob){
+                  reject(new Error('blob empty'))
+                  return
+                }
+                let uploadFile = new File([blob], file.name, {
+                  type: mimeType,
+                  lastModified: Date.now()
+                })
+                uploadFile.uid = file.uid
+                resolve(uploadFile)
+              }, mimeType, quality)
+            }
+            img.onerror = reject
+            img.src = event.target.result
+          }
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
       },
       //上传完毕后文件列表发送变化
       handleChange(info) {

@@ -37,8 +37,10 @@
               <template v-slot:expandIcon="props">
                 <a-icon type="caret-right" :rotate="props.isActive ? 90 : 0" />
               </template>
-              <a-collapse-panel v-if="unit.courseWork_url" key="0" :header="'课后作业'" :style="customStyle">
-                <a-button @click="handleViewCode(unit)" type="primary" icon="edit">去做作业</a-button>
+              <a-collapse-panel v-if="unit.assignmentMode === 'objective' || unit.courseWork_url" key="0" :header="'课后作业'" :style="customStyle">
+                <a-button @click="handleViewCode(unit)" type="primary" icon="edit">
+                  {{ unit.assignmentMode === 'objective' ? '开始答题' : '去做作业' }}
+                </a-button>
               </a-collapse-panel>
               <a-collapse-panel v-if="unit.coursePpt" :header="'课程资料'" :style="customStyle">
                 <div v-for="(u,i) in unit.coursePpt.split(',')" :key="i">
@@ -131,6 +133,16 @@ export default {
       }
     },
     handleViewCode (unit) {
+      if (unit.assignmentMode === 'objective') {
+        this.$router.push({
+          path: '/objective-homework',
+          query: {
+            sourceType: 'courseUnit',
+            sourceId: unit.id
+          }
+        })
+        return
+      }
       switch (unit.courseWorkType) {
         case 1:
           window.open('/scratch3/index.html?scene=course&unitId='+unit.id)

@@ -19,7 +19,12 @@
           <a-list-item-meta>
             <img class="work-cover" slot="avatar" :src="work.workCover_url" alt="" />
             <template slot="title" class="title" href="#">
-              <h3>{{ work.workName }} <a-tag color="blue">{{work.codeType_dictText}}</a-tag></h3>
+              <h3>
+                {{ work.workName }}
+                <a-tag :color="work.assignmentMode === 'objective' ? 'gold' : 'blue'">
+                  {{ work.assignmentMode === 'objective' ? '客观题' : work.codeType_dictText }}
+                </a-tag>
+              </h3>
             </template>
             <template slot="description">
               <pre class="work-desc">{{work.workDesc}}</pre>
@@ -27,6 +32,10 @@
                 <a-tag>班级：{{ work.departName }}</a-tag>
                 <a-divider type="vertical" />
                 <a-tag>老师：{{ work.createBy_dictText }}</a-tag>
+                <template v-if="work.assignmentMode === 'objective' && work.objectiveScore != null">
+                  <a-divider type="vertical" />
+                  <a-tag color="green">得分：{{ work.objectiveScore }}/{{ work.objectiveTotalScore }}</a-tag>
+                </template>
               </div>
             </template>
           </a-list-item-meta>
@@ -39,9 +48,14 @@
             </a-tooltip>
             <a-button v-if="work.workDocumentUrl" @click="openWorkFile(work.workDocumentUrl)">作业资料</a-button>
             <!-- <a-divider v-if="work.workDocumentUrl != null" type="vertical" /> -->
-            <a-button type="primary" :disabled="work.mineWorkStatus > 1" @click="toAdditionalWork(work, false)"> {{work.mineWorkStatus==null?'去做作业':'修改作业'}} </a-button>
-            <a-divider v-if="work.mineWorkStatus != null && work.mineWorkStatus < 2" type="vertical" />
-            <a-button type="primary" v-if="work.mineWorkStatus != null && work.mineWorkStatus < 2" @click="toAdditionalWork(work, true)"> 重做 </a-button>
+            <a-button
+              type="primary"
+              :disabled="work.assignmentMode === 'objective' ? (work.objectiveScore != null && !work.allowRedo) : work.mineWorkStatus > 1"
+              @click="toAdditionalWork(work, false)">
+              {{ actionText(work) }}
+            </a-button>
+            <a-divider v-if="showRedo(work)" type="vertical" />
+            <a-button type="primary" v-if="showRedo(work)" @click="toAdditionalWork(work, true)"> 重做 </a-button>
           </div>
         </a-list-item>
       </a-list>
@@ -81,6 +95,18 @@ export default {
   },
   methods: {
     getFilePrevew,
+    actionText(work) {
+      if (work.assignmentMode === 'objective') {
+        return work.objectiveScore == null ? '开始答题' : '查看/重答'
+      }
+      return work.mineWorkStatus == null ? '去做作业' : '修改作业'
+    },
+    showRedo(work) {
+      if (work.assignmentMode === 'objective') {
+        return !!work.allowRedo && work.objectiveScore != null
+      }
+      return work.mineWorkStatus != null && work.mineWorkStatus < 2
+    },
     getList() {
       this.loading = true
       this.datasource = []
@@ -107,6 +133,18 @@ export default {
       }
     },
     toAdditionalWork(item, reset) {
+      if (item.assignmentMode === 'objective') {
+        this.$router.push({
+          path: '/objective-homework',
+          query: {
+            sourceType: 'additional',
+            sourceId: item.additionalWorkId,
+            departId: item.departId,
+            reset: reset ? '1' : '0'
+          }
+        })
+        return
+      }
       console.log(item);
       var workUrl
       switch (item.codeType) {

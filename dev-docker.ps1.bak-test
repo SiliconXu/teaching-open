@@ -14,34 +14,19 @@ $ComposeFile = Join-Path $DeployDir 'docker-compose.yml'
 
 $ApiBuilderImage = 'teaching-open-api-builder'
 $ApiBaseImage = 'teaching-open-local-maven8:latest'
-$ApiBaseSources = @(
-    'docker.m.daocloud.io/library/maven:3.8-openjdk-8-slim',
-    'maven:3.8-openjdk-8-slim'
-)
+$ApiBaseSource = 'maven:3.8-openjdk-8-slim'
 $ApiMavenCacheVolume = 'teaching-open-m2-cache'
 $ApiRuntimeImage = 'registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-api:latest'
 $ApiRuntimeBaseImage = 'teaching-open-local-openjdk8:latest'
-$ApiRuntimeBaseSources = @(
-    'docker.m.daocloud.io/library/eclipse-temurin:8-jre-jammy',
-    'eclipse-temurin:8-jre-jammy'
-)
+$ApiRuntimeBaseSource = 'eclipse-temurin:8-jre-jammy'
 
 $WebBuilderImage = 'teaching-open-web-builder'
 $WebBaseImage = 'teaching-open-local-node16:latest'
-$WebBaseSources = @(
-    'docker.m.daocloud.io/library/node:16',
-    'node:16'
-)
+$WebBaseSource = 'node:16'
 $WebNpmCacheVolume = 'teaching-open-npm-cache'
 $WebRuntimeImage = 'registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-web:latest'
 $WebRuntimeBaseImage = 'teaching-open-local-nginx:latest'
-$WebRuntimeBaseSources = @(
-    'docker.m.daocloud.io/library/nginx:latest',
-    'nginx:latest'
-)
-
-$PullRetryCount = 3
-$PullRetryDelaySeconds = 3
+$WebRuntimeBaseSource = 'nginx:latest'
 
 function Write-Step {
     param([string]$Message)
@@ -62,84 +47,22 @@ function Invoke-Checked {
 }
 
 function Test-Docker {
-    Write-Step 'Checking Docker'
+    Write-Step "Checking Docker"
     Invoke-Checked 'docker' @('version')
     Invoke-Checked 'docker' @('compose', 'version')
 }
 
-function Image-Exists {
-    param([string]$Image)
-
-    & docker image inspect $Image *> $null
-    return $LASTEXITCODE -eq 0
-}
-
-function Get-ImageSources {
-    param(
-        [string]$EnvVarName,
-        [string[]]$Defaults
-    )
-
-    $sources = @()
-    $envValue = [Environment]::GetEnvironmentVariable($EnvVarName)
-    if (-not [string]::IsNullOrWhiteSpace($envValue)) {
-        $sources += ($envValue -split '[,;]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    }
-    $sources += $Defaults
-
-    $uniqueSources = New-Object System.Collections.Generic.List[string]
-    foreach ($source in $sources) {
-        if (-not $uniqueSources.Contains($source)) {
-            $uniqueSources.Add($source)
-        }
-    }
-    return $uniqueSources.ToArray()
-}
-
-function Pull-ImageWithRetry {
-    param([string]$Image)
-
-    for ($attempt = 1; $attempt -le $PullRetryCount; $attempt++) {
-        Write-Step "Pulling $Image (attempt $attempt/$PullRetryCount)"
-        & docker pull $Image
-        if ($LASTEXITCODE -eq 0) {
-            return $true
-        }
-        if ($attempt -lt $PullRetryCount) {
-            Start-Sleep -Seconds $PullRetryDelaySeconds
-        }
-    }
-    return $false
-}
-
 function Pull-And-Tag {
     param(
-        [string[]]$Sources,
+        [string]$Source,
         [string]$Target
     )
 
-    if (Image-Exists $Target) {
-        Write-Step "Using cached image $Target"
-        return
-    }
+    Write-Step "Pulling $Source"
+    Invoke-Checked 'docker' @('pull', $Source)
 
-    foreach ($source in $Sources) {
-        if (Image-Exists $source) {
-            Write-Step "Using local base image $source"
-            Invoke-Checked 'docker' @('tag', $source, $Target)
-            return
-        }
-    }
-
-    foreach ($source in $Sources) {
-        if (Pull-ImageWithRetry $source) {
-            Write-Step "Tagging $source as $Target"
-            Invoke-Checked 'docker' @('tag', $source, $Target)
-            return
-        }
-    }
-
-    throw "Failed to pull base image. Tried: $($Sources -join ', '). You can also pre-pull one of them manually or set TEACHING_OPEN_*_SOURCE environment variables."
+    Write-Step "Tagging $Source as $Target"
+    Invoke-Checked 'docker' @('tag', $Source, $Target)
 }
 
 function Ensure-Volume {
@@ -155,7 +78,7 @@ function Start-Infra {
 }
 
 function Build-Backend {
-    Pull-And-Tag -Sources (Get-ImageSources -EnvVarName 'TEACHING_OPEN_API_BASE_SOURCE' -Defaults $ApiBaseSources) -Target $ApiBaseImage
+    Pull-And-Tag -Source $ApiBaseSource -Target $ApiBaseImage
 
     Write-Step 'Building backend builder image'
     Invoke-Checked 'docker' @(
@@ -178,7 +101,7 @@ function Build-Backend {
         'bash', '-lc', 'mvn clean package'
     )
 
-    Pull-And-Tag -Sources (Get-ImageSources -EnvVarName 'TEACHING_OPEN_API_RUNTIME_BASE_SOURCE' -Defaults $ApiRuntimeBaseSources) -Target $ApiRuntimeBaseImage
+    Pull-And-Tag -Source $ApiRuntimeBaseSource -Target $ApiRuntimeBaseImage
 
     Write-Step 'Building backend runtime image'
     Invoke-Checked 'docker' @(
@@ -191,7 +114,7 @@ function Build-Backend {
 }
 
 function Build-Frontend {
-    Pull-And-Tag -Sources (Get-ImageSources -EnvVarName 'TEACHING_OPEN_WEB_BASE_SOURCE' -Defaults $WebBaseSources) -Target $WebBaseImage
+    Pull-And-Tag -Source $WebBaseSource -Target $WebBaseImage
 
     Write-Step 'Building frontend builder image'
     Invoke-Checked 'docker' @(
@@ -214,7 +137,7 @@ function Build-Frontend {
         'bash', '-lc', 'npm ci --cache /root/.npm --legacy-peer-deps && npm run build'
     )
 
-    Pull-And-Tag -Sources (Get-ImageSources -EnvVarName 'TEACHING_OPEN_WEB_RUNTIME_BASE_SOURCE' -Defaults $WebRuntimeBaseSources) -Target $WebRuntimeBaseImage
+    Pull-And-Tag -Source $WebRuntimeBaseSource -Target $WebRuntimeBaseImage
 
     Write-Step 'Building frontend runtime image'
     Invoke-Checked 'docker' @(

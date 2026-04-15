@@ -14,7 +14,7 @@
         </a-form-item>
         <a-form-item label="所属课程包" :labelCol="labelCol" :wrapperCol="wrapperCol">
           <a-select v-decorator="['courseId', validatorRules.courseId]" rows="4">
-            <a-select-option v-for="(course,index) in courseList" :key="index.toString()" :value="course.id">{{course.courseName}}</a-select-option>
+            <a-select-option v-for="course in courseList" :key="course.id" :value="course.id">{{course.courseName}}</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="单元名称" :labelCol="labelCol" :wrapperCol="wrapperCol">
@@ -24,14 +24,14 @@
           <a-textarea v-decorator="[ 'unitIntro', validatorRules.unitIntro]" placeholder="请输入单元简介"></a-textarea>
         </a-form-item>
         <a-form-item label="课程封面" :labelCol="labelCol" :wrapperCol="wrapperCol">
-          <j-upload v-decorator="['unitCover', validatorRules.unitCover]"  :number="1" :trigger-change="true"></j-upload>
+          <j-upload v-decorator="['unitCover', validatorRules.unitCover]" :number="1" :trigger-change="true"></j-upload>
         </a-form-item>
         <a-form-item label="课程视频" :labelCol="labelCol" :wrapperCol="wrapperCol">
           <a-card>
-            <a-radio-group name="courseVideoSource" :defaultValue='1' v-model="model.courseVideoSource" @change="onCourseVideoSourceChange">
-              <a-radio :value='1'>上传</a-radio>
-              <a-radio :value='2'>链接</a-radio>
-              <a-radio :value='3'>外部</a-radio>
+            <a-radio-group name="courseVideoSource" :defaultValue="1" v-model="model.courseVideoSource" @change="onCourseVideoSourceChange">
+              <a-radio :value="1">上传</a-radio>
+              <a-radio :value="2">链接</a-radio>
+              <a-radio :value="3">外部</a-radio>
             </a-radio-group>
             <a-divider></a-divider>
             <j-upload v-if="model.courseVideoSource==1" v-decorator="['courseVideo', validatorRules.courseVideo]" :number="1" :trigger-change="true"></j-upload>
@@ -41,7 +41,7 @@
           <a-switch checkedChildren="对学生显示" unCheckedChildren="对学生隐藏" v-model="model.showCourseVideo" defaultChecked/>
         </a-form-item>
         <a-form-item label="课程案例" :labelCol="labelCol" :wrapperCol="wrapperCol">
-          <j-upload v-decorator="['courseCase', validatorRules.courseCase]"  :number="1" :trigger-change="true"></j-upload>
+          <j-upload v-decorator="['courseCase', validatorRules.courseCase]" :number="1" :trigger-change="true"></j-upload>
           <a-switch checkedChildren="对学生显示" unCheckedChildren="对学生隐藏" v-model="model.showCourseCase" defaultChecked/>
         </a-form-item>
         <a-form-item label="课程资料" :labelCol="labelCol" :wrapperCol="wrapperCol">
@@ -52,11 +52,17 @@
           <j-upload v-decorator="['coursePlan', validatorRules.coursePlan]" :trigger-change="true"></j-upload>
           <a-switch checkedChildren="对学生显示" unCheckedChildren="对学生隐藏" v-model="model.showCoursePlan" />
         </a-form-item>
-        <a-form-item label="作业类型" :labelCol="labelCol" :wrapperCol="wrapperCol">
+        <a-form-item label="作业形态" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <a-radio-group v-decorator="['assignmentMode', { initialValue: 'file' }]" :disabled="objectiveModeReadonly" @change="onAssignmentModeChange">
+            <a-radio-button value="file">文件作业</a-radio-button>
+            <a-radio-button v-if="canUseObjectiveMode || currentAssignmentMode === 'objective'" value="objective" :disabled="!canUseObjectiveMode">线上客观题</a-radio-button>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item v-if="currentAssignmentMode === 'file'" label="作业类型" :labelCol="labelCol" :wrapperCol="wrapperCol">
           <j-dict-select-tag type="list" v-decorator="['courseWorkType', {initialValue: 2}, validatorRules.courseWorkType]" :trigger-change="true" dictCode="work_type" placeholder="请选择作业类型"/>
         </a-form-item>
-        <a-form-item label="预设作业" :labelCol="labelCol" :wrapperCol="wrapperCol">
-          <j-upload v-decorator="['courseWork', validatorRules.courseWork]"  :number="1" :trigger-change="true"></j-upload>
+        <a-form-item v-if="currentAssignmentMode === 'file'" label="预设作业" :labelCol="labelCol" :wrapperCol="wrapperCol">
+          <j-upload v-decorator="['courseWork', validatorRules.courseWork]" :number="1" :trigger-change="true"></j-upload>
         </a-form-item>
         <a-form-item label="课程内容" :labelCol="labelCol" :wrapperCol="wrapperCol" >
           <j-editor v-decorator="['mediaContent', { trigger: 'input' }]" />
@@ -79,197 +85,232 @@
           </a-row>
         </a-form-item>
       </a-form>
+
+      <a-card v-if="currentAssignmentMode === 'objective'" title="客观题配置" :bordered="false">
+        <objective-homework-editor ref="objectiveEditor" v-model="objectiveConfig" />
+      </a-card>
     </a-spin>
-    <!-- <div class="drawer-footer">
-      <a-button type="primary" @click="handleOk">确定</a-button>
-      <a-button type="default" @click="handleCancel">取消</a-button>
-    </div> -->
     <TeachingMapEditor ref="mapEditor" />
   </j-modal>
 </template>
 
 <script>
+import { httpAction, getAction } from '@/api/manage'
+import pick from 'lodash.pick'
+import JUpload from '@/components/jeecg/JUpload'
+import JEditor from '@/components/jeecg/JEditor'
+import JDictSelectTag from '@/components/dict/JDictSelectTag'
+import TeachingMapEditor from './TeachingMapEditor'
+import ObjectiveHomeworkEditor from './ObjectiveHomeworkEditor'
+import { hasButtonPermission } from '@/utils/buttonPermission'
 
-  import { httpAction, getAction } from '@/api/manage'
-  import pick from 'lodash.pick'
-  import { validateDuplicateValue } from '@/utils/util'
-  import JUpload from '@/components/jeecg/JUpload'
-  import JEditor from '@/components/jeecg/JEditor'
-  import JDictSelectTag from "@/components/dict/JDictSelectTag"
-  import TeachingMapEditor from './TeachingMapEditor'
-  export default {
-    name: "TeachingCourseUnitModal",
-    components: { 
-      JUpload,
-      JEditor,
-      JDictSelectTag,
-      TeachingMapEditor
+export default {
+  name: 'TeachingCourseUnitModal',
+  components: {
+    JUpload,
+    JEditor,
+    JDictSelectTag,
+    TeachingMapEditor,
+    ObjectiveHomeworkEditor,
+  },
+  data () {
+    return {
+      form: this.$form.createForm(this),
+      title: '操作',
+      width: 1200,
+      visible: false,
+      model: {},
+      currentAssignmentMode: 'file',
+      objectiveConfig: {
+        allowRedo: false,
+        showResultAfterSubmit: true,
+        questions: []
+      },
+      labelCol: {
+        xs: { span: 24 },
+        sm: { span: 5 },
+      },
+      wrapperCol: {
+        xs: { span: 24 },
+        sm: { span: 16 },
+      },
+      confirmLoading: false,
+      validatorRules: {
+        unitName: {rules: [{required: true, message: '请输入单元名称!'}]},
+        unitIntro: {rules: []},
+        unitCover: {},
+        courseId: {rules: [{required: true, message: '请选择所属课程!'}]},
+        courseVideo: {rules: []},
+        courseCase: {rules: []},
+        coursePpt: {rules: []},
+        courseWorkType: {rules: []},
+        courseWork: {rules: []},
+        courseWorkAnswer: {rules: []},
+        coursePlan: {rules: []},
+        mapX: {rules: [{pattern:/^-?\d+$/, message: '请输入整数!'}]},
+        mapY: {rules: [{pattern:/^-?\d+$/, message: '请输入整数!'}]},
+      },
+      courseList: [],
+      url: {
+        add: '/teaching/teachingCourseUnit/add',
+        edit: '/teaching/teachingCourseUnit/edit',
+        courseList: '/teaching/teachingCourse/list',
+        saveObjective: '/teaching/objectiveHomework/saveCourseUnit',
+        loadObjective: '/teaching/objectiveHomework/getBySource',
+      },
+    }
+  },
+  computed: {
+    canUseObjectiveMode() {
+      return hasButtonPermission('objective:courseunit:mode')
     },
-    data () {
-      return {
-        form: this.$form.createForm(this),
-        title:"操作",
-        width:1000,
-        visible: false,
-        model: {},
-        labelCol: {
-          xs: { span: 24 },
-          sm: { span: 5 },
-        },
-        wrapperCol: {
-          xs: { span: 24 },
-          sm: { span: 16 },
-        },
-        confirmLoading: false,
-        validatorRules: {
-          unitName: {rules: [
-            {required: true, message: '请输入单元名称!'},
-          ]},
-          unitIntro: {rules: [
-          ]},
-          unitCover: {},
-          courseId: {rules: [
-            {required: true, message: '请选择所属课程!'},
-          ]},
-          courseVideo: {rules: [
-          ]},
-          courseCase: {rules: [
-          ]},
-          coursePpt: {rules: [
-          ]},
-          courseWorkType: {rules: [
-            // {required: true, message: '请选择作业类型'}
-          ]},
-          courseWork: {rules: [
-          ]},
-          courseWorkAnswer: {rules: [
-          ]},
-          coursePlan: {rules: [
-          ]},
-          mapX: {rules: [
-            {pattern:/^-?\d+$/, message: '请输入整数!'},
-          ]},
-          mapY: {rules: [
-            {pattern:/^-?\d+$/, message: '请输入整数!'},
-          ]},
-        },
-        courseList: [],
-        url: {
-          add: "/teaching/teachingCourseUnit/add",
-          edit: "/teaching/teachingCourseUnit/edit",
-          courseList: "/teaching/teachingCourse/list",
-        },
+    objectiveModeReadonly() {
+      return !this.canUseObjectiveMode && this.currentAssignmentMode === 'objective'
+    },
+  },
+  created () {
+    this.initCourseList()
+  },
+  methods: {
+    initCourseList(){
+      getAction(this.url.courseList, { pageNo: 1, pageSize: 999 }).then((res)=>{
+        if(res.success){
+          this.courseList = res.result.records
+        }else{
+          this.$message.warning('课程列表获取失败：'+res.message)
+        }
+      })
+    },
+    add () {
+      this.edit({
+        showCourseVideo: true,
+        showCourseCase: true,
+        showCoursePpt: false,
+        showCoursePlan: false,
+        assignmentMode: 'file',
+      })
+    },
+    addObjective () {
+      this.edit({
+        showCourseVideo: true,
+        showCourseCase: true,
+        showCoursePpt: false,
+        showCoursePlan: false,
+        assignmentMode: 'objective',
+      })
+    },
+    edit (record) {
+      this.form.resetFields()
+      this.model = Object.assign({}, record)
+      this.visible = true
+      this.currentAssignmentMode = this.model.assignmentMode || 'file'
+      this.objectiveConfig = {
+        allowRedo: false,
+        showResultAfterSubmit: true,
+        questions: []
       }
-    },
-    created () {
-      this.initCourseList();
-    },
-    methods: {
-      initCourseList(){
-        const that = this;
-        getAction(this.url.courseList,{"pageNo": 1, "pageSize": 999}).then((res)=>{
-          if(res.success){
-            that.courseList = res.result.records;
-          }else{
-            that.$message.warning("课程列表获取失败："+res.message);
-          }
-        })
-      },
-      add () {
-        this.edit({
-          showCourseVideo: true,
-          showCourseCase: true,
-          showCoursePpt: false,
-          showCoursePlan: false
-        });
-      },
-      edit (record) {
-        this.form.resetFields();
-        this.model = Object.assign({}, record);
-        this.visible = true;
-        this.$nextTick(() => {
-          this.form.setFieldsValue(pick(this.model,
+      this.$nextTick(() => {
+        this.form.setFieldsValue(pick(this.model,
           'createBy','createTime','unitName','unitIntro','courseId','unitCover',
           'courseVideo','showCourseVideo','courseVideoSource','coursePpt','showCoursePpt',
           'courseWorkType','courseWork','courseWorkAnswer','coursePlan','showCoursePlan',
-          'courseCase','showCourseCase','mapX','mapY','mediaContent', 'orderNum'))
-        })
-      },
-      close () {
-        this.$emit('close');
-        this.visible = false;
-      },
-      handleOk () {
-        const that = this;
-        // 触发表单验证
-        this.form.validateFields((err, values) => {
-          if (!err) {
-            that.confirmLoading = true;
-            let httpurl = '';
-            let method = '';
-            if(!this.model.id){
-              httpurl+=this.url.add;
-              method = 'post';
-            }else{
-              httpurl+=this.url.edit;
-               method = 'put';
-            }
-            let formData = Object.assign(this.model, values);
-            console.log("表单提交数据",formData)
-            httpAction(httpurl,formData,method).then((res)=>{
-              if(res.success){
-                that.$message.success(res.message);
-                that.$emit('ok');
-              }else{
-                that.$message.warning(res.message);
-              }
-            }).finally(() => {
-              that.confirmLoading = false;
-              that.close();
-            })
+          'courseCase','showCourseCase','mapX','mapY','mediaContent', 'orderNum', 'assignmentMode'))
+      })
+      if (this.model.id && this.currentAssignmentMode === 'objective') {
+        this.loadObjectiveConfig(this.model.id)
+      }
+    },
+    loadObjectiveConfig(id) {
+      getAction(this.url.loadObjective, { sourceType: 'courseUnit', sourceId: id }).then((res) => {
+        if (res.success) {
+          this.objectiveConfig = res.result
+        }
+      })
+    },
+    close () {
+      this.$emit('close')
+      this.visible = false
+    },
+    handleOk () {
+      const that = this
+      this.form.validateFields((err, values) => {
+        if (!err) {
+          that.confirmLoading = true
+          const formData = Object.assign({}, this.model, values)
+          if (!formData.assignmentMode) {
+            formData.assignmentMode = this.currentAssignmentMode
           }
-         
-        })
-      },
-      handleCancel () {
-        this.close()
-      },
-      onCourseVideoSourceChange(v){
-        this.form.setFieldsValue({courseVideo:'', courseVideoExtern: ''})
-        this.model.courseVideoExtern = ''
-        this.model.courseVideo = ''
-        this.model.courseVideoSource = v.target.value
-      },
-      popupCallback(row){
-        this.form.setFieldsValue(pick(row,
+          if (formData.assignmentMode === 'objective' && !this.canUseObjectiveMode) {
+            this.$message.warning('当前账号没有配置客观题单元的权限')
+            that.confirmLoading = false
+            return
+          }
+          if (formData.assignmentMode === 'objective') {
+            this.$refs.objectiveEditor.validate().then((objectiveConfig) => {
+              return httpAction(this.url.saveObjective, {
+                courseUnit: Object.assign({}, formData, { courseWorkType: 0, courseWork: null, courseWorkAnswer: null }),
+                objectiveConfig
+              }, 'post')
+            }).then((res) => {
+              if (res.success) {
+                that.$message.success('保存成功')
+                that.$emit('ok')
+                that.close()
+              } else {
+                that.$message.warning(res.message)
+                that.close()
+              }
+            }).catch(() => {
+            }).finally(() => {
+              that.confirmLoading = false
+            })
+            return
+          }
+          const httpurl = this.model.id ? this.url.edit : this.url.add
+          const method = this.model.id ? 'put' : 'post'
+          httpAction(httpurl, formData, method).then((res)=>{
+            if(res.success){
+              that.$message.success(res.message)
+              that.$emit('ok')
+            }else{
+              that.$message.warning(res.message)
+            }
+          }).finally(() => {
+            that.confirmLoading = false
+            that.close()
+          })
+        }
+      })
+    },
+    handleCancel () {
+      this.close()
+    },
+    onCourseVideoSourceChange(v){
+      this.form.setFieldsValue({courseVideo:'', courseVideoExtern: ''})
+      this.model.courseVideoExtern = ''
+      this.model.courseVideo = ''
+      this.model.courseVideoSource = v.target.value
+    },
+    onAssignmentModeChange(v) {
+      if (this.objectiveModeReadonly) {
+        this.form.setFieldsValue({ assignmentMode: 'objective' })
+        return
+      }
+      this.currentAssignmentMode = v.target.value
+      if (this.currentAssignmentMode === 'objective') {
+        this.form.setFieldsValue({ courseWorkType: 0, courseWork: undefined, courseWorkAnswer: undefined })
+      }
+    },
+    popupCallback(row){
+      this.form.setFieldsValue(pick(row,
         'createBy','createTime','unitName','unitIntro','courseId',
         'courseVideo','showCourseVideo','coursePpt','showCoursePpt',
         'courseWorkType','courseWork','courseWorkAnswer', 'orderNum',
-        'coursePlan','showCoursePlan','courseCase','showCourseCase','mapX','mapY'))
-      },
-      //显示地图编辑器
-      showMapEdit() {
-        this.$refs.mapEditor.openById(this.model.courseId, this.model.id)
-      },
-    }
-  }
-</script>
-
-<style lang="less" scoped>
-.drawer-footer {
-  // position: absolute;
-  bottom: -8px;
-  width: 100%;
-  border-top: 1px solid #e8e8e8;
-  padding: 10px 16px;
-  text-align: right;
-  left: 0;
-  background: #fff;
-  border-radius: 0 0 2px 2px;
-  .ant-btn {
-    margin-left: 30px;
-    margin-bottom: 30px;
-    float: right;
+        'coursePlan','showCoursePlan','courseCase','showCourseCase','mapX','mapY','assignmentMode'))
+    },
+    showMapEdit() {
+      this.$refs.mapEditor.openById(this.model.courseId, this.model.id)
+    },
   }
 }
-</style>
+</script>

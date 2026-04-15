@@ -1,35 +1,317 @@
-# Teaching Open 本地隔离部署说明
+# Teaching Open 本地 Docker 运行说明
 
-本文档记录在 Windows + Docker Desktop 环境下，使用尽量隔离的方式本地运行 `Teaching Open` 的完整步骤。
+这份文档只保留本地开发最需要的内容。
 
 目标：
 
 - 本机只安装 `Docker Desktop`
-- 不安装 `Java`、`Maven`、`Node.js`、`MySQL`、`Redis`、`IDEA`
-- 数据库、缓存、前端、后端、构建过程都在容器中完成
-- 修改代码后可以重新构建并测试
+- 前端、后端、MySQL、Redis 都跑在容器里
+- 改完代码后可以快速重建
+- 改了数据库 `*.sql` 后，知道应该怎么更新本地库
 
-适用目录：
+项目目录：
 
 ```powershell
 D:\ext-dev\teaching-open
 ```
 
-仓库内已提供一键脚本：
+一键脚本：
 
 - [dev-docker.ps1](/D:/ext-dev/teaching-open/dev-docker.ps1)
 
-如果你想直接用脚本而不是手动执行命令，可以优先看本文档的“快速方式”。
+## 1. 前置条件
 
-## 0. 快速方式
+只需要确认两件事：
 
-打开 `PowerShell`，进入项目根目录：
+- 已安装 `Docker Desktop`
+- 在 PowerShell 里可以执行 `docker` 和 `docker compose`
+
+进入项目目录：
 
 ```powershell
 cd D:\ext-dev\teaching-open
 ```
 
-第一次完整构建并启动：
+这套脚本现在会按下面顺序获取基础镜像：
+
+- 先用本地已经存在的镜像
+- 再尝试国内镜像地址
+- 最后再回退到 Docker Hub 官方地址
+
+如果你本机网络有特殊要求，也可以提前手动指定镜像源：
+
+```powershell
+$env:TEACHING_OPEN_API_BASE_SOURCE = 'docker.m.daocloud.io/library/maven:3.8-openjdk-8-slim'
+$env:TEACHING_OPEN_API_RUNTIME_BASE_SOURCE = 'docker.m.daocloud.io/library/eclipse-temurin:8-jre-jammy'
+$env:TEACHING_OPEN_WEB_BASE_SOURCE = 'docker.m.daocloud.io/library/node:16'
+$env:TEACHING_OPEN_WEB_RUNTIME_BASE_SOURCE = 'docker.m.daocloud.io/library/nginx:latest'
+```
+
+## 2. 第一次完整启动
+
+第一次建议严格按下面顺序执行。
+
+### 第 1 步：启动数据库和 Redis
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action infra
+```
+
+### 第 2 步：等待数据库启动
+
+```powershell
+Start-Sleep -Seconds 20
+```
+
+### 第 3 步：导入数据库 SQL
+
+先设置 MySQL `root` 密码变量：
+
+```powershell
+$DbRootPassword = '你的MySQL root密码'
+```
+
+先导入基础库：
+
+```powershell
+docker cp .\api\db\teachingopen2.8.sql teachingopen_db:/tmp/teachingopen2.8.sql
+docker cp .\api\db\qrtzUpcase.sql teachingopen_db:/tmp/qrtzUpcase.sql
+docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot -p$DbRootPassword teachingopen < /tmp/teachingopen2.8.sql"
+docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot -p$DbRootPassword teachingopen < /tmp/qrtzUpcase.sql"
+```
+
+再按顺序导入所有升级脚本：
+
+```powershell
+$updates = @(
+  '.\api\db\update2.2.sql',
+  '.\api\db\update2.3.sql',
+  '.\api\db\update2.4.sql',
+  '.\api\db\update2.5.sql',
+  '.\api\db\update2.6.sql',
+  '.\api\db\update2.7.sql',
+  '.\api\db\update2.8.sql',
+  '.\api\db\update2.9.sql',
+  '.\api\db\update3.0.sql'
+)
+
+foreach ($file in $updates) {
+  $name = Split-Path $file -Leaf
+  docker cp $file "teachingopen_db:/tmp/$name"
+  docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot -p$DbRootPassword teachingopen < /tmp/$name"
+}
+```
+
+### 第 4 步：构建并启动前后端
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action full
+```
+
+## 3. 访问地址
+
+启动完成后：
+
+- 前端首页：`http://localhost`
+- 后端接口前缀：`http://localhost/api`
+
+默认账号：
+
+- `admin`
+- `teacher`
+- `student`
+
+默认密码：
+
+- `123456`
+
+## 4. 日常更新怎么做
+
+### 4.1 只改后端
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action backend
+```
+
+### 4.2 只改前端
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action frontend
+```
+
+### 4.3 前后端都改了
+
+最简单，直接重跑完整构建：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action full
+```
+
+## 5. 数据库 SQL 怎么维护
+
+数据库脚本都在：
+
+```text
+api\db
+```
+
+当前这几个文件的角色要分清：
+
+- `teachingopen2.8.sql`
+  - 基础初始化脚本
+  - 负责建基础表和基础数据
+- `qrtzUpcase.sql`
+  - Quartz 相关脚本
+- `update2.2.sql` 到 `update3.0.sql`
+  - 增量升级脚本
+  - 按版本顺序执行
+
+本地 Docker 的使用规则，统一按下面来：
+
+### 规则 1：新增数据库变更时，写到最新的 `update*.sql`
+
+比如这次功能要新增表、字段、字典、菜单、权限：
+
+- 就写到当前最新升级文件里
+- 现在就是 [update3.0.sql](/D:/ext-dev/teaching-open/api/db/update3.0.sql)
+
+如果后面版本继续升级：
+
+- 就新增 `update3.1.sql`、`update3.2.sql` 这类文件
+
+### 规则 2：本地已有数据库时，只执行新增或改过的升级脚本
+
+例如你刚改了：
+
+- [update3.0.sql](/D:/ext-dev/teaching-open/api/db/update3.0.sql)
+
+下面命令默认你已经先执行过：
+
+```powershell
+$DbRootPassword = '你的MySQL root密码'
+```
+
+那就在数据库容器里执行它：
+
+```powershell
+docker cp .\api\db\update3.0.sql teachingopen_db:/tmp/update3.0.sql
+docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot -p$DbRootPassword teachingopen < /tmp/update3.0.sql"
+```
+
+执行完以后，再根据你改的是前端、后端还是两边都改，分别运行：
+
+- 只改后端：`backend`
+- 只改前端：`frontend`
+- 前后端都改：`full`
+
+### 规则 3：如果要重建一个全新的本地数据库，必须重新导入“基础脚本 + 全部升级脚本”
+
+不能只导入 `teachingopen2.8.sql`。
+
+正确做法是：
+
+1. 删除旧数据库目录
+2. 重新启动 `db` 和 `redis`
+3. 重新导入：
+   - `teachingopen2.8.sql`
+   - `qrtzUpcase.sql`
+   - 所有 `update*.sql`
+
+## 6. 改了 SQL 以后，本地数据库怎么更新
+
+分两种情况。
+
+### 情况 A：保留当前本地数据
+
+适合：
+
+- 只是加字段
+- 加表
+- 加字典
+- 加菜单权限
+
+步骤：
+
+1. 改对应的 `update*.sql`
+2. 把这个 SQL 文件导入当前数据库
+3. 重建前端、后端
+
+示例默认你已经先执行过：
+
+```powershell
+$DbRootPassword = '你的MySQL root密码'
+```
+
+示例：
+
+```powershell
+docker cp .\api\db\update3.0.sql teachingopen_db:/tmp/update3.0.sql
+docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot -p$DbRootPassword teachingopen < /tmp/update3.0.sql"
+powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action full
+```
+
+### 情况 B：不要当前本地数据，直接重置
+
+适合：
+
+- 表结构改动很多
+- 想从头验证初始化流程
+- 想确保本地库和仓库 SQL 完全一致
+
+步骤：
+
+1. 停掉容器
+2. 删除 MySQL 数据目录
+3. 重新启动基础设施
+4. 重新导入全部 SQL
+5. 重新构建前后端
+
+下面命令默认你已经先执行过：
+
+```powershell
+$DbRootPassword = '你的MySQL root密码'
+```
+
+命令如下：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action down
+Remove-Item -Recurse -Force .\deploy\data\mysql
+powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action infra
+Start-Sleep -Seconds 20
+docker cp .\api\db\teachingopen2.8.sql teachingopen_db:/tmp/teachingopen2.8.sql
+docker cp .\api\db\qrtzUpcase.sql teachingopen_db:/tmp/qrtzUpcase.sql
+docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot -p$DbRootPassword teachingopen < /tmp/teachingopen2.8.sql"
+docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot -p$DbRootPassword teachingopen < /tmp/qrtzUpcase.sql"
+```
+
+然后再执行：
+
+```powershell
+$updates = @(
+  '.\api\db\update2.2.sql',
+  '.\api\db\update2.3.sql',
+  '.\api\db\update2.4.sql',
+  '.\api\db\update2.5.sql',
+  '.\api\db\update2.6.sql',
+  '.\api\db\update2.7.sql',
+  '.\api\db\update2.8.sql',
+  '.\api\db\update2.9.sql',
+  '.\api\db\update3.0.sql'
+)
+
+foreach ($file in $updates) {
+  $name = Split-Path $file -Leaf
+  docker cp $file "teachingopen_db:/tmp/$name"
+  docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot -p$DbRootPassword teachingopen < /tmp/$name"
+}
+
+powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action full
+```
+
+## 7. 最常用的命令
+
+完整重建：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action full
@@ -41,414 +323,32 @@ powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action full
 powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action infra
 ```
 
-只重建后端并重启后端容器：
+只重建后端：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action backend
 ```
 
-只重建前端并重启前端容器：
+只重建前端：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action frontend
 ```
 
-只启动应用容器：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action up
-```
-
-停止所有服务：
+停止所有容器：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action down
 ```
 
-脚本动作说明：
+## 8. 一句话工作流
 
-- `full`：启动 `db/redis`，构建后端，构建前端，启动 `api/web`
-- `infra`：只启动 `db/redis`
-- `backend`：只重建后端并重启 `api`
-- `frontend`：只重建前端并重启 `web`
-- `up`：只启动 `api/web`
-- `down`：停止所有服务
+以后本地开发，按下面记就够了：
 
-## 1. 前置条件
+- 第一次跑：`infra` -> 导入全部 SQL -> `full`
+- 只改后端：`backend`
+- 只改前端：`frontend`
+- 前后端都改：`full`
+- 改了数据库：先执行对应 `update*.sql`，再跑 `backend` / `frontend` / `full`
+- 想彻底重置数据库：删 `deploy\data\mysql`，然后重新导入全部 SQL
 
-- 已安装 `Docker Desktop`
-- 能正常执行 `docker` 和 `docker compose`
-- 当前仓库目录为 `D:\ext-dev\teaching-open`
-
-说明：
-
-- 本项目已经调整为支持通过 `BASE_IMAGE` 指定基础镜像
-- 这样可以优先使用你本地已经 `pull` 下来的镜像，减少构建时再次访问远端仓库的概率
-
-## 2. 启动数据库和 Redis
-
-进入项目根目录：
-
-```powershell
-cd D:\ext-dev\teaching-open
-```
-
-启动 `db` 和 `redis`：
-
-```powershell
-docker compose -f .\deploy\docker-compose.yml up -d db redis
-```
-
-说明：
-
-- 第一次启动时，MySQL 会自动初始化数据库
-- 数据会保存在 `deploy\data\mysql` 和 `deploy\data\redis`
-
-## 3. 构建后端编译镜像
-
-### 3.1 拉取 Maven + JDK 8 基础镜像
-
-```powershell
-docker pull maven:3.8-openjdk-8-slim
-```
-
-### 3.2 给基础镜像打本地别名
-
-```powershell
-docker tag maven:3.8-openjdk-8-slim teaching-open-local-maven8:latest
-```
-
-### 3.3 构建后端编译环境镜像
-
-```powershell
-docker build `
-  --build-arg BASE_IMAGE=teaching-open-local-maven8:latest `
-  -t teaching-open-api-builder `
-  -f .\api\Dockerfile.builder .\api
-```
-
-说明：
-
-- `maven:3.8-openjdk-8-slim` 这类基础镜像第一次拉取成功后，后续通常会被本地 Docker 直接复用
-- 只有在你手动删除镜像、主动 `docker pull` 新版本，或清理 Docker 本地缓存时，才需要重新拉取
-- 这个 builder 镜像里已经预置了 Maven `settings.xml`，会优先使用阿里云公共 Maven 仓库镜像来加速访问 `central`
-- 如果你刚更新过代码，记得先重新执行这一步，再跑后端构建命令
-
-## 4. 编译后端源码
-
-为了避免每次都重新下载 Maven 依赖，先创建一个本地 Docker volume 缓存：
-
-```powershell
-docker volume create teaching-open-m2-cache
-```
-
-```powershell
-docker run --rm `
-  -v "D:\ext-dev\teaching-open\api:/workspace" `
-  -v teaching-open-m2-cache:/root/.m2 `
-  -w /workspace `
-  teaching-open-api-builder `
-  bash -lc "mvn clean package"
-```
-
-编译成功后会生成：
-
-```text
-api\jeecg-boot-module-system\target\teaching-open-2.8.0.jar
-```
-
-说明：
-
-- `api\jeecg-boot-module-system\target` 属于构建产物目录，默认不提交到 Git
-- 日常提交时只提交源码和配置变更，不提交生成出来的 `jar`
-
-## 5. 构建后端运行镜像
-
-### 5.1 拉取 Java 8 运行时镜像
-
-`openjdk:8` 已不可用，改用 `eclipse-temurin:8-jre-jammy`。
-
-```powershell
-docker pull eclipse-temurin:8-jre-jammy
-```
-
-### 5.2 给基础镜像打本地别名
-
-```powershell
-docker tag eclipse-temurin:8-jre-jammy teaching-open-local-openjdk8:latest
-```
-
-### 5.3 构建后端运行镜像
-
-```powershell
-docker build `
-  --build-arg BASE_IMAGE=teaching-open-local-openjdk8:latest `
-  -t registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-api:latest `
-  -f .\api\Dockerfile .\api
-```
-
-说明：
-
-- 构建时如果看到 `JSONArgsRecommended` 警告，可以暂时忽略
-- 只要最终显示构建成功即可
-
-## 6. 构建前端编译镜像
-
-### 6.1 拉取 Node 16 基础镜像
-
-```powershell
-docker pull node:16
-```
-
-### 6.2 给基础镜像打本地别名
-
-```powershell
-docker tag node:16 teaching-open-local-node16:latest
-```
-
-### 6.3 构建前端编译环境镜像
-
-```powershell
-docker build `
-  --build-arg BASE_IMAGE=teaching-open-local-node16:latest `
-  -t teaching-open-web-builder `
-  -f .\web\Dockerfile.builder .\web
-```
-
-说明：
-
-- 这个 builder 镜像里已经把 `npm` 和 `yarn` 的 registry 配到了 `https://registry.npmmirror.com`
-- 如果你刚拉了最新代码，记得先重新执行这一步，再跑前端构建命令
-
-## 7. 编译前端源码
-
-使用 `npm`，不要使用 `yarn`。
-
-原因：
-
-- 当前仓库有 `package-lock.json`
-- 没有 `yarn.lock`
-- 使用 `yarn` 时容易拉到过新的依赖，导致 `Node 16` 不兼容
-- 使用 `npm ci --legacy-peer-deps` 对这个老 Vue 2 项目最稳
-
-执行：
-
-```powershell
-docker volume create teaching-open-npm-cache
-docker run --rm `
-  -v "D:\ext-dev\teaching-open\web:/workspace" `
-  -v teaching-open-npm-cache:/root/.npm `
-  -w /workspace `
-  teaching-open-web-builder `
-  bash -lc "npm ci --cache /root/.npm --legacy-peer-deps && npm run build"
-```
-
-说明：
-
-- `teaching-open-m2-cache` 用来缓存 Maven 依赖
-- `teaching-open-npm-cache` 用来缓存 npm 下载包
-- 后续重复构建时可以直接复用这两个 Docker volume，不需要每次重新下载全部依赖
-- 所以后续更新 app 时，通常只需要重新编译和重新构建你自己的镜像，不需要每次重新拉取 Maven / Node / Nginx / MySQL 这些基础镜像
-
-编译成功后会生成：
-
-```text
-web\dist
-```
-
-说明：
-
-- `web\dist` 属于前端构建产物目录，默认不提交到 Git
-- 日常提交时只提交源码和配置变更，不提交生成出来的静态文件
-
-## 8. 构建前端运行镜像
-
-### 8.1 拉取 Nginx 基础镜像
-
-```powershell
-docker pull nginx:latest
-```
-
-### 8.2 给基础镜像打本地别名
-
-```powershell
-docker tag nginx:latest teaching-open-local-nginx:latest
-```
-
-### 8.3 构建前端运行镜像
-
-```powershell
-docker build `
-  --build-arg BASE_IMAGE=teaching-open-local-nginx:latest `
-  -t registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-web:latest `
-  -f .\web\Dockerfile .\web
-```
-
-## 9. 启动前后端服务
-
-```powershell
-docker compose -f .\deploy\docker-compose.yml up -d api web
-```
-
-说明：
-
-- `docker-compose.yml` 中 `api` 和 `web` 使用的镜像名，和上面构建时使用的镜像名保持一致
-- 因此会优先使用你本地刚构建的镜像，而不是重新拉取远端镜像
-
-## 10. 访问系统
-
-浏览器打开：
-
-- 前端首页：`http://localhost`
-- 后端接口前缀：`http://localhost/api`
-
-默认测试账号：
-
-- `admin`
-- `teacher`
-- `student`
-
-默认密码：
-
-- `123456`
-
-## 11. 修改代码后的重建方式
-
-### 11.1 只改后端
-
-重新编译后端：
-
-```powershell
-docker run --rm `
-  -v "D:\ext-dev\teaching-open\api:/workspace" `
-  -v teaching-open-m2-cache:/root/.m2 `
-  -w /workspace `
-  teaching-open-api-builder `
-  bash -lc "mvn clean package"
-```
-
-重新构建后端运行镜像：
-
-```powershell
-docker build `
-  --build-arg BASE_IMAGE=teaching-open-local-openjdk8:latest `
-  -t registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-api:latest `
-  -f .\api\Dockerfile .\api
-```
-
-重启后端容器：
-
-```powershell
-docker compose -f .\deploy\docker-compose.yml up -d --force-recreate api
-```
-
-### 11.2 只改前端
-
-重新编译前端：
-
-```powershell
-docker run --rm `
-  -v "D:\ext-dev\teaching-open\web:/workspace" `
-  -v teaching-open-npm-cache:/root/.npm `
-  -w /workspace `
-  teaching-open-web-builder `
-  bash -lc "npm ci --cache /root/.npm --legacy-peer-deps && npm run build"
-```
-
-重新构建前端运行镜像：
-
-```powershell
-docker build `
-  --build-arg BASE_IMAGE=teaching-open-local-nginx:latest `
-  -t registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-web:latest `
-  -f .\web\Dockerfile .\web
-```
-
-重启前端容器：
-
-```powershell
-docker compose -f .\deploy\docker-compose.yml up -d --force-recreate web
-```
-
-## 12. 停止服务
-
-停止所有容器：
-
-```powershell
-docker compose -f .\deploy\docker-compose.yml down
-```
-
-## 13. 清理数据
-
-如果你想彻底删除本地测试数据：
-
-1. 先停止容器
-2. 再删除以下目录
-
-```text
-deploy\data\mysql
-deploy\data\redis
-deploy\data\upload
-```
-
-## 14. 常见坑总结
-
-### 14.1 `maven:3.8-openjdk-8-slim` 拉取失败
-
-现象：
-
-- `failed to fetch anonymous token`
-- `401 Unauthorized`
-
-建议：
-
-- 先手动 `docker pull`
-- 再 `docker tag` 成本地别名
-- 构建时通过 `--build-arg BASE_IMAGE=本地别名` 使用
-
-### 14.2 `openjdk:8 not found`
-
-原因：
-
-- `openjdk` 官方镜像已废弃
-
-处理：
-
-- 改用 `eclipse-temurin:8-jre-jammy`
-
-### 14.3 前端 `yarn` 安装失败
-
-现象：
-
-- `minimatch` 要求更高版本 Node
-
-原因：
-
-- 没有 `yarn.lock`
-- `yarn` 会解析到过新的间接依赖
-
-处理：
-
-- 不用 `yarn`
-- 改用 `npm ci --legacy-peer-deps`
-
-### 14.4 前端 `npm ci` 出现 `ERESOLVE`
-
-原因：
-
-- 老 Vue 2 项目依赖存在 `peerDependencies` 冲突
-
-处理：
-
-- 使用 `npm ci --legacy-peer-deps`
-
-## 15. 建议
-
-如果只是本地验证功能，这套方式已经足够。
-
-如果后续进入高频开发阶段，可以再考虑：
-
-- 保持 `db`、`redis` 走 Docker
-- 前后端改为本机源码热启动
-
-这样开发效率会更高，但本机需要额外安装 `JDK 8`、`Maven`、`Node 16`。

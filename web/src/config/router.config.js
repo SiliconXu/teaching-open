@@ -93,6 +93,12 @@ export const constantRouterMap = [
         name: 'newsDetail',
         component: () => import(/* webpackChunkName: "home" */ '@/views/home/NewsDetail')
       },
+      {
+        path: '/objective-homework',
+        name: 'objectiveHomework',
+        hidden: true,
+        component: () => import(/* webpackChunkName: "account" */ '@/views/account/course/ObjectiveHomeworkPage')
+      },
     ]
   },
   {

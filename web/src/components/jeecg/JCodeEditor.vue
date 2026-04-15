@@ -91,6 +91,7 @@
       return {
         // 内部真实的内容
         code: '',
+        syncingFromOutside: false,
         iconType: 'fullscreen',
         hasCode:false,
         // 默认的语法类型
@@ -169,7 +170,16 @@
         immediate: false,
         handler(value) {
           this._getCoder().then(() => {
-            this.coder.setValue(value)
+            const nextValue = value || ''
+            const currentValue = this.coder.getValue()
+            if (currentValue === nextValue) {
+              this.code = nextValue
+              return
+            }
+            this.syncingFromOutside = true
+            this.coder.setValue(nextValue)
+            this.code = nextValue
+            this.syncingFromOutside = false
           })
         }
       },
@@ -253,7 +263,7 @@
           }else{
             this.hasCode=false
           }
-          if (this.$emit) {
+          if (!this.syncingFromOutside && this.$emit) {
             this.$emit('input', this.code)
           }
         })
@@ -278,11 +288,15 @@
       },
       setCodeContent(val){
         setTimeout(()=>{
-          if(!val){
-            this.coder.setValue('')
-          }else{
-            this.coder.setValue(val)
+          const nextValue = val || ''
+          if (this.coder.getValue() === nextValue) {
+            this.code = nextValue
+            return
           }
+          this.syncingFromOutside = true
+          this.coder.setValue(nextValue)
+          this.code = nextValue
+          this.syncingFromOutside = false
         },300)
       },
       // 获取当前语法类型

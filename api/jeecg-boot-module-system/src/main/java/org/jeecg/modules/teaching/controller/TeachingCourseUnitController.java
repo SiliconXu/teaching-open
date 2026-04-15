@@ -7,6 +7,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.shiro.SecurityUtils;
 import org.jeecg.common.api.vo.DictResult;
 import org.jeecg.common.api.vo.Result;
 import org.jeecg.common.aspect.annotation.PermissionData;
@@ -29,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jeecg.common.system.base.controller.JeecgController;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.ModelAndView;
 import io.swagger.annotations.Api;
@@ -54,6 +56,8 @@ public class TeachingCourseUnitController extends JeecgController<TeachingCourse
 	 private ISysFileService sysFileService;
 	 @Autowired
 	 private Ow365Util ow365Util;
+	 @Autowired
+	 private JdbcTemplate jdbcTemplate;
 
 
 
@@ -144,6 +148,12 @@ public class TeachingCourseUnitController extends JeecgController<TeachingCourse
 	@ApiOperation(value="课程单元-添加", notes="课程单元-添加")
 	@PostMapping(value = "/add")
 	public Result<?> add(@RequestBody TeachingCourseUnit teachingCourseUnit) {
+		if (StringUtils.isBlank(teachingCourseUnit.getAssignmentMode())) {
+			teachingCourseUnit.setAssignmentMode("file");
+		}
+		if (StringUtils.equals("objective", teachingCourseUnit.getAssignmentMode())) {
+			return Result.error("线上客观题请在客观题作业管理中保存");
+		}
 		teachingCourseUnitService.save(teachingCourseUnit);
 		return Result.ok("添加成功！");
 	}
@@ -158,7 +168,21 @@ public class TeachingCourseUnitController extends JeecgController<TeachingCourse
 	@ApiOperation(value="课程单元-编辑", notes="课程单元-编辑")
 	@PutMapping(value = "/edit")
 	public Result<?> edit(@RequestBody TeachingCourseUnit teachingCourseUnit) {
+		if (StringUtils.isBlank(teachingCourseUnit.getAssignmentMode())) {
+			teachingCourseUnit.setAssignmentMode("file");
+		}
+		if (StringUtils.equals("objective", teachingCourseUnit.getAssignmentMode())) {
+			return Result.error("线上客观题请在客观题作业管理中保存");
+		}
+		TeachingCourseUnit oldUnit = teachingCourseUnitService.getById(teachingCourseUnit.getId());
+		Result<?> permissionCheck = ensureObjectivePermission(oldUnit, "objective:courseunit:edit");
+		if (permissionCheck != null) {
+			return permissionCheck;
+		}
 		teachingCourseUnitService.updateById(teachingCourseUnit);
+		if (!StringUtils.equals("objective", teachingCourseUnit.getAssignmentMode())) {
+			clearObjectiveHomework("courseUnit", teachingCourseUnit.getId());
+		}
 		return Result.ok("编辑成功!");
 	}
 
@@ -181,7 +205,12 @@ public class TeachingCourseUnitController extends JeecgController<TeachingCourse
 	@DeleteMapping(value = "/delete")
 	public Result<?> delete(@RequestParam(name="id",required=true) String id) {
 		TeachingCourseUnit unit = teachingCourseUnitService.getById(id);
+		Result<?> permissionCheck = ensureObjectivePermission(unit, "objective:courseunit:delete");
+		if (permissionCheck != null) {
+			return permissionCheck;
+		}
 		if (unit != null){
+			clearObjectiveHomework("courseUnit", id);
 			sysFileService.deleteByKeyWithFile(unit.getCoursePpt());
 			sysFileService.deleteByKeyWithFile(unit.getUnitCover());
 			sysFileService.deleteByKeyWithFile(unit.getCourseVideo());
@@ -207,6 +236,11 @@ public class TeachingCourseUnitController extends JeecgController<TeachingCourse
 		List<String> idList = Arrays.asList(ids.split(","));
 		List<TeachingCourseUnit> unitList = teachingCourseUnitService.list(new QueryWrapper<TeachingCourseUnit>().in("id", idList));
 		for(TeachingCourseUnit unit: unitList){
+			Result<?> permissionCheck = ensureObjectivePermission(unit, "objective:courseunit:delete");
+			if (permissionCheck != null) {
+				return permissionCheck;
+			}
+			clearObjectiveHomework("courseUnit", unit.getId());
 			sysFileService.deleteByKeyWithFile(unit.getCoursePpt());
 			sysFileService.deleteByKeyWithFile(unit.getUnitCover());
 			sysFileService.deleteByKeyWithFile(unit.getCourseVideo());
@@ -258,5 +292,42 @@ public class TeachingCourseUnitController extends JeecgController<TeachingCourse
     public Result<?> importExcel(HttpServletRequest request, HttpServletResponse response) {
         return super.importExcel(request, response, TeachingCourseUnit.class);
     }
+
+	private void clearObjectiveHomework(String sourceType, String sourceId) {
+		jdbcTemplate.update(
+			"delete si from teaching_objective_submit_item si inner join teaching_objective_submit s on s.id = si.submit_id inner join teaching_objective_homework h on h.id = s.homework_id where h.source_type=? and h.source_id=?",
+			sourceType, sourceId);
+		jdbcTemplate.update(
+			"delete s from teaching_objective_submit s inner join teaching_objective_homework h on h.id = s.homework_id where h.source_type=? and h.source_id=?",
+			sourceType, sourceId);
+		jdbcTemplate.update(
+			"delete qo from teaching_objective_question_option qo inner join teaching_objective_question q on q.id = qo.question_id inner join teaching_objective_homework h on h.id = q.homework_id where h.source_type=? and h.source_id=?",
+			sourceType, sourceId);
+		jdbcTemplate.update(
+			"delete q from teaching_objective_question q inner join teaching_objective_homework h on h.id = q.homework_id where h.source_type=? and h.source_id=?",
+			sourceType, sourceId);
+		jdbcTemplate.update("delete from teaching_objective_homework where source_type=? and source_id=?", sourceType, sourceId);
+	}
+
+	private Result<?> ensureObjectivePermission(TeachingCourseUnit unit, String actionPerm) {
+		if (unit == null || !StringUtils.equals("objective", unit.getAssignmentMode())) {
+			return null;
+		}
+		LoginUser currentUser = getCurrentUser();
+		if (currentUser == null) {
+			return Result.error("请先登录");
+		}
+		boolean teacherOperator = hasRole("admin") || hasRole("dev") || hasRole("teacher") || Integer.valueOf(2).equals(currentUser.getUserIdentity());
+		if (!teacherOperator) {
+			return Result.error("仅教师可操作客观题单元");
+		}
+		if (hasRole("admin") || hasRole("dev")) {
+			return null;
+		}
+		if (!SecurityUtils.getSubject().isPermitted("objective:courseunit:mode") || (StringUtils.isNotBlank(actionPerm) && !SecurityUtils.getSubject().isPermitted(actionPerm))) {
+			return Result.error("当前账号没有客观题单元权限");
+		}
+		return null;
+	}
 
 }

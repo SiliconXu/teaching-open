@@ -56,6 +56,11 @@ public class TeachingAdditionalWork implements Serializable {
     @ApiModelProperty(value = "作业类型")
     @Dict(dicCode = "work_type")
     private Integer codeType;
+    /**作业形态*/
+    @Excel(name = "作业形态", width = 15, dicCode = "assignment_mode")
+    @ApiModelProperty(value = "作业形态")
+    @Dict(dicCode = "assignment_mode")
+    private String assignmentMode;
 	/**作业名*/
 	@Excel(name = "作业名", width = 15)
     @ApiModelProperty(value = "作业名")

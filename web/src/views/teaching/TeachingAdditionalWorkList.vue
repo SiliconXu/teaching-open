@@ -1,6 +1,5 @@
 <template>
   <a-card :bordered="false">
-    <!-- 查询区域 -->
     <div class="table-page-search-wrapper">
       <a-form layout="inline" @keyup.enter.native="searchQuery">
         <a-row :gutter="24">
@@ -18,21 +17,15 @@
             <span style="float: left; overflow: hidden" class="table-page-search-submitButtons">
               <a-button type="primary" @click="searchQuery" icon="search">查询</a-button>
               <a-button type="primary" @click="searchReset" icon="reload" style="margin-left: 8px">重置</a-button>
-              <!-- <a @click="handleToggleSearch" style="margin-left: 8px">
-                {{ toggleSearchStatus ? '收起' : '展开' }}
-                <a-icon :type="toggleSearchStatus ? 'up' : 'down'" />
-              </a> -->
             </span>
           </a-col>
         </a-row>
       </a-form>
     </div>
-    <!-- 查询区域-END -->
 
-    <!-- 操作按钮区域 -->
     <div class="table-operator">
-      <a-button @click="handleAdd" type="primary" icon="plus">布置作业</a-button>
-      <a-dropdown v-if="selectedRowKeys.length > 0">
+      <a-button v-if="canAdd" @click="handleAdd" type="primary" icon="plus">{{ addButtonText }}</a-button>
+      <a-dropdown v-if="canDelete && selectedRowKeys.length > 0">
         <a-menu slot="overlay">
           <a-menu-item key="1" @click="batchDel"><a-icon type="delete" />删除</a-menu-item>
         </a-menu>
@@ -40,12 +33,10 @@
       </a-dropdown>
     </div>
 
-    <!-- table区域-begin -->
     <div>
       <div class="ant-alert ant-alert-info" style="margin-bottom: 16px">
         <i class="anticon anticon-info-circle ant-alert-icon"></i> 已选择
-        <a style="font-weight: 600">{{ selectedRowKeys.length }}</a
-        >项
+        <a style="font-weight: 600">{{ selectedRowKeys.length }}</a>项
         <a style="margin-left: 24px" @click="onClearSelected">清空</a>
       </div>
 
@@ -55,7 +46,7 @@
         size="middle"
         bordered
         rowKey="id"
-        :scroll="{x:true}"
+        :scroll="{ x: true }"
         :columns="columns"
         :dataSource="dataSource"
         :pagination="ipagination"
@@ -86,10 +77,11 @@
           <j-ellipsis :value="text" :length="20" />
         </span>
         <span slot="action" slot-scope="text, record">
-          <a @click="handleEdit(record)">编辑</a>
-
-          <a-divider type="vertical" />
-          <a-dropdown>
+          <a v-if="canEditRecord(record)" @click="handleEdit(record)">编辑</a>
+          <template v-if="canEditRecord(record) && canDeleteRecord(record)">
+            <a-divider type="vertical" />
+          </template>
+          <a-dropdown v-if="canDeleteRecord(record)">
             <a class="ant-dropdown-link">更多 <a-icon type="down" /></a>
             <a-menu slot="overlay">
               <a-menu-item>
@@ -99,6 +91,7 @@
               </a-menu-item>
             </a-menu>
           </a-dropdown>
+          <span v-if="!canEditRecord(record) && !canDeleteRecord(record)" style="color: rgba(0, 0, 0, 0.25)">无权限</span>
         </span>
       </a-table>
     </div>
@@ -114,18 +107,30 @@ import { JeecgListMixin } from '@/mixins/JeecgListMixin'
 import TeachingAdditionalWorkModal from './modules/TeachingAdditionalWorkModal'
 import JSelectDepart from '@/components/jeecgbiz/JSelectDepart'
 import JEllipsis from '@/components/jeecg/JEllipsis'
+import { hasButtonPermission } from '@/utils/buttonPermission'
+
 export default {
   name: 'TeachingAdditionalWorkList',
   mixins: [JeecgListMixin, mixinDevice],
   components: {
     JSelectDepart,
     TeachingAdditionalWorkModal,
-    JEllipsis
+    JEllipsis,
+  },
+  props: {
+    assignmentModeFilter: {
+      type: String,
+      default: '',
+    },
+    permissionConfig: {
+      type: Object,
+      default: () => ({}),
+    },
   },
   data() {
     return {
+      queryParam: this.assignmentModeFilter ? { assignmentMode: this.assignmentModeFilter } : {},
       description: '附加作业管理页面',
-      // 表头
       columns: [
         {
           title: '#',
@@ -146,6 +151,20 @@ export default {
           title: '代码类型',
           align: 'center',
           dataIndex: 'codeType_dictText',
+        },
+        {
+          title: '作业形态',
+          align: 'center',
+          dataIndex: 'assignmentMode_dictText',
+          customRender: (text, record) => {
+            if (record.assignmentMode === 'objective') {
+              return '线上客观题'
+            }
+            if (record.assignmentMode === 'file') {
+              return '文件作业'
+            }
+            return text
+          },
         },
         {
           title: '作业名',
@@ -177,7 +196,7 @@ export default {
         },
         {
           title: '状态',
-          dataIndex: 'status_dictText'
+          dataIndex: 'status_dictText',
         },
         {
           title: '创建日期',
@@ -188,7 +207,7 @@ export default {
           title: '操作',
           dataIndex: 'action',
           align: 'center',
-          fixed:"right",
+          fixed: 'right',
           width: 147,
           scopedSlots: { customRender: 'action' },
         },
@@ -204,16 +223,58 @@ export default {
     }
   },
   computed: {
-    importExcelUrl: function () {
+    importExcelUrl() {
       return `${window._CONFIG['domianURL']}/${this.url.importExcelUrl}`
+    },
+    isObjectiveManageMode() {
+      return this.assignmentModeFilter === 'objective'
+    },
+    addButtonText() {
+      return this.isObjectiveManageMode ? '布置客观题' : '布置作业'
+    },
+    canAdd() {
+      return this.checkPermission(this.permissionConfig.add)
+    },
+    canDelete() {
+      return this.checkPermission(this.permissionConfig.delete)
     },
   },
   methods: {
     initDictConfig() {},
-    searchQuery() {
-      if (this.queryParam.workDept) {
-        this.queryParam.workDept = '*' + this.queryParam.workDept + '*'
+    getDefaultQueryParam() {
+      return this.assignmentModeFilter ? { assignmentMode: this.assignmentModeFilter } : {}
+    },
+    checkPermission(permission) {
+      return !permission || hasButtonPermission(permission)
+    },
+    canEditRecord() {
+      return this.checkPermission(this.permissionConfig.edit)
+    },
+    canDeleteRecord() {
+      return this.checkPermission(this.permissionConfig.delete)
+    },
+    handleAdd() {
+      if (this.isObjectiveManageMode && this.$refs.modalForm && this.$refs.modalForm.addObjective) {
+        this.$refs.modalForm.addObjective()
+        this.$refs.modalForm.title = '布置客观题作业'
+        this.$refs.modalForm.disableSubmit = false
+        return
       }
+      this.$refs.modalForm.add()
+      this.$refs.modalForm.title = '新增'
+      this.$refs.modalForm.disableSubmit = false
+    },
+    searchQuery() {
+      const nextQueryParam = Object.assign({}, this.getDefaultQueryParam(), this.queryParam)
+      if (nextQueryParam.workDept) {
+        const normalizedWorkDept = String(nextQueryParam.workDept).replace(/^\*+|\*+$/g, '')
+        nextQueryParam.workDept = `*${normalizedWorkDept}*`
+      }
+      this.queryParam = nextQueryParam
+      this.loadData(1)
+    },
+    searchReset() {
+      this.queryParam = this.getDefaultQueryParam()
       this.loadData(1)
     },
   },
