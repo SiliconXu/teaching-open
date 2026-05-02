@@ -12,3 +12,6 @@
 
 ## data
 deploy/data
+
+## local env
+deploy/.env
