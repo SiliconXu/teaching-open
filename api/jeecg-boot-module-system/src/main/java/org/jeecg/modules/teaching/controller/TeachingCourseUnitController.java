@@ -14,13 +14,12 @@ import org.jeecg.common.aspect.annotation.PermissionData;
 import org.jeecg.common.system.query.QueryGenerator;
 import org.jeecg.common.system.vo.LoginUser;
 import org.jeecg.modules.common.util.Ow365Util;
-import org.jeecg.modules.common.util.QiniuUtil;
-import org.jeecg.modules.system.service.ISysFileService;
 import org.jeecg.modules.teaching.entity.TeachingCourseUnit;
 import org.jeecg.modules.teaching.model.CourseUnitModel;
 import org.jeecg.modules.teaching.model.CourseUnitWorkModel;
 import org.jeecg.modules.teaching.service.ITeachingCourseDeptService;
 import org.jeecg.modules.teaching.service.ITeachingCourseUnitService;
+import org.jeecg.modules.teaching.service.TeachingAssetCleanupService;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -53,11 +52,11 @@ public class TeachingCourseUnitController extends JeecgController<TeachingCourse
 	@Autowired
 	private ITeachingCourseDeptService teachingCourseDeptService;
 	 @Autowired
-	 private ISysFileService sysFileService;
-	 @Autowired
 	 private Ow365Util ow365Util;
 	 @Autowired
 	 private JdbcTemplate jdbcTemplate;
+	 @Autowired
+	 private TeachingAssetCleanupService teachingAssetCleanupService;
 
 
 
@@ -181,6 +180,7 @@ public class TeachingCourseUnitController extends JeecgController<TeachingCourse
 		}
 		teachingCourseUnitService.updateById(teachingCourseUnit);
 		if (!StringUtils.equals("objective", teachingCourseUnit.getAssignmentMode())) {
+			teachingAssetCleanupService.cleanupObjectiveHomeworkAssets("courseUnit", teachingCourseUnit.getId());
 			clearObjectiveHomework("courseUnit", teachingCourseUnit.getId());
 		}
 		return Result.ok("编辑成功!");
@@ -210,14 +210,8 @@ public class TeachingCourseUnitController extends JeecgController<TeachingCourse
 			return permissionCheck;
 		}
 		if (unit != null){
+			teachingAssetCleanupService.cleanupCourseUnitAssets(unit);
 			clearObjectiveHomework("courseUnit", id);
-			sysFileService.deleteByKeyWithFile(unit.getCoursePpt());
-			sysFileService.deleteByKeyWithFile(unit.getUnitCover());
-			sysFileService.deleteByKeyWithFile(unit.getCourseVideo());
-			sysFileService.deleteByKeyWithFile(unit.getCourseWork());
-			sysFileService.deleteByKeyWithFile(unit.getCourseWorkAnswer());
-			sysFileService.deleteByKeyWithFile(unit.getCourseCase());
-			sysFileService.deleteByKeyWithFile(unit.getCoursePlan());
 			teachingCourseUnitService.removeById(id);
 		}
 		return Result.ok("删除成功!");
@@ -240,14 +234,8 @@ public class TeachingCourseUnitController extends JeecgController<TeachingCourse
 			if (permissionCheck != null) {
 				return permissionCheck;
 			}
+			teachingAssetCleanupService.cleanupCourseUnitAssets(unit);
 			clearObjectiveHomework("courseUnit", unit.getId());
-			sysFileService.deleteByKeyWithFile(unit.getCoursePpt());
-			sysFileService.deleteByKeyWithFile(unit.getUnitCover());
-			sysFileService.deleteByKeyWithFile(unit.getCourseVideo());
-			sysFileService.deleteByKeyWithFile(unit.getCourseWork());
-			sysFileService.deleteByKeyWithFile(unit.getCourseWorkAnswer());
-			sysFileService.deleteByKeyWithFile(unit.getCourseCase());
-			sysFileService.deleteByKeyWithFile(unit.getCoursePlan());
 		}
 		this.teachingCourseUnitService.removeByIds(idList);
 		return Result.ok("批量删除成功!");

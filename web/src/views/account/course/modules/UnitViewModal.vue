@@ -39,7 +39,13 @@
               </template>
               <a-collapse-panel v-if="unit.assignmentMode === 'objective' || unit.courseWork_url" key="0" :header="'课后作业'" :style="customStyle">
                 <a-button @click="handleViewCode(unit)" type="primary" icon="edit">
-                  {{ unit.assignmentMode === 'objective' ? '开始答题' : '去做作业' }}
+                  {{ objectiveActionText }}
+                </a-button>
+                <a-button
+                  v-if="unit.assignmentMode === 'objective' && objectiveState.submitted && objectiveState.allowRedo"
+                  style="margin-left: 8px"
+                  @click="handleViewCode(unit, true)">
+                  重做
                 </a-button>
               </a-collapse-panel>
               <a-collapse-panel v-if="unit.coursePpt" :header="'课程资料'" :style="customStyle">
@@ -86,6 +92,18 @@ export default {
       visible: false,
       unit: {},
       scratchFrameHref: '',
+      objectiveState: {
+        submitted: false,
+        allowRedo: false,
+      },
+    }
+  },
+  computed: {
+    objectiveActionText() {
+      if (this.unit.assignmentMode !== 'objective') {
+        return '去做作业'
+      }
+      return this.objectiveState.submitted ? '查看结果' : '开始答题'
     }
   },
   mounted(){
@@ -113,11 +131,31 @@ export default {
     view(unit){
       this.visible = true;
       this.unit = unit
+      this.objectiveState = {
+        submitted: false,
+        allowRedo: false,
+      }
+      if (unit.assignmentMode === 'objective') {
+        this.loadObjectiveState(unit)
+      }
       getAction('/teaching/teachingDepartDayLog/unitViewLog?unitId=' + this.unit.id)
     },
     handleCancel(e) {
       this.unit = {}
       this.visible = false
+    },
+    loadObjectiveState(unit) {
+      getAction('/teaching/objectiveHomework/studentView', {
+        sourceType: 'courseUnit',
+        sourceId: unit.id
+      }).then((res) => {
+        if (res.success) {
+          this.objectiveState = {
+            submitted: !!res.result.submitted,
+            allowRedo: !!res.result.allowRedo,
+          }
+        }
+      })
     },
     previewCourseCase(unit) {
       let url = this.getFileAccessHttpUrl(unit.courseCase)
@@ -132,13 +170,16 @@ export default {
           return '/python/player.html?lang=turtle&url='+ url
       }
     },
-    handleViewCode (unit) {
+    handleViewCode (unit, reset = false) {
       if (unit.assignmentMode === 'objective') {
+        const mode = reset || !this.objectiveState.submitted ? 'answer' : 'review'
         this.$router.push({
           path: '/objective-homework',
           query: {
             sourceType: 'courseUnit',
-            sourceId: unit.id
+            sourceId: unit.id,
+            mode,
+            reset: reset ? '1' : '0'
           }
         })
         return

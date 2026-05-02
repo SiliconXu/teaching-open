@@ -43,7 +43,7 @@
           <img v-for="(image, imageIndex) in splitImages(question.stemImages)" :key="imageIndex" :src="getFileAccessHttpUrl(image)" alt="题目图片" />
         </div>
 
-        <a-radio-group v-model="answers[question.id]" class="answer-group" :disabled="submitDisabled">
+        <a-radio-group v-model="answers[question.id]" class="answer-group" :disabled="questionReadonly">
           <a-radio
             v-for="option in displayOptions(question)"
             :key="option.optionKey"
@@ -85,8 +85,8 @@
 
       <div class="footer-actions">
         <a-button @click="reloadData">刷新</a-button>
-        <a-button v-if="page.allowRedo && page.submitted" @click="resetAnswers">重新作答</a-button>
-        <a-button type="primary" :loading="submitting" :disabled="submitDisabled" @click="submitHomework">
+        <a-button v-if="page.allowRedo && page.submitted" @click="startRedo">重新作答</a-button>
+        <a-button v-if="showSubmitButton" type="primary" :loading="submitting" :disabled="submitDisabled" @click="submitHomework">
           {{ submitButtonText }}
         </a-button>
       </div>
@@ -128,18 +128,30 @@ export default {
         submitted: false,
         canSubmit: true,
         latestResult: null,
-      }
+      },
+      viewMode: 'answer'
+    }
+  },
+  watch: {
+    $route() {
+      this.reloadData()
     }
   },
   computed: {
+    questionReadonly() {
+      return this.submitting || this.viewMode === 'review'
+    },
     submitDisabled() {
-      return this.submitting || !this.page.canSubmit || !this.page.questions.length
+      return this.submitting || !this.page.canSubmit || !this.page.questions.length || this.viewMode === 'review'
     },
     submitButtonText() {
       if (this.page.submitted && this.page.allowRedo) {
         return '重新提交'
       }
       return '提交作业'
+    },
+    showSubmitButton() {
+      return this.viewMode !== 'review'
     },
     showResultItems() {
       return this.page.showResultAfterSubmit && this.page.latestResult && this.page.latestResult.items && this.page.latestResult.items.length
@@ -166,6 +178,13 @@ export default {
   methods: {
     getFileAccessHttpUrl,
     getFilePrevew,
+    resolveViewMode() {
+      const routeMode = this.$route.query.mode
+      if (routeMode === 'review' || routeMode === 'answer') {
+        return routeMode
+      }
+      return 'answer'
+    },
     reloadData() {
       const sourceType = this.$route.query.sourceType
       const sourceId = this.$route.query.sourceId
@@ -175,14 +194,11 @@ export default {
         return
       }
       this.loading = true
+      this.viewMode = this.resolveViewMode()
       getAction('/teaching/objectiveHomework/studentView', { sourceType, sourceId, departId }).then(res => {
         if (res.success) {
           this.page = Object.assign({}, this.page, res.result)
-          if (this.$route.query.reset === '1' && this.page.allowRedo) {
-            this.resetAnswers(false)
-          } else if (!this.page.submitted || this.page.allowRedo) {
-            this.resetAnswers(false)
-          }
+          this.syncPageState()
         } else {
           this.$message.error(res.message)
         }
@@ -227,6 +243,36 @@ export default {
       }
       return `<p>${escapeHtml(content).replace(/\n/g, '<br/>')}</p>`
     },
+    syncPageState() {
+      const wantsReset = this.$route.query.reset === '1'
+      if (wantsReset && this.page.allowRedo) {
+        this.viewMode = 'answer'
+        this.resetAnswers(false)
+        return
+      }
+      if (this.page.submitted) {
+        if (this.viewMode === 'review' || !this.page.allowRedo) {
+          this.viewMode = 'review'
+          this.fillAnswersFromLatest()
+          return
+        }
+        this.resetAnswers(false)
+        return
+      }
+      this.viewMode = 'answer'
+      this.resetAnswers(false)
+    },
+    fillAnswersFromLatest() {
+      const next = {}
+      ;(this.page.questions || []).forEach(question => {
+        next[question.id] = undefined
+      })
+      const items = (this.page.latestResult && this.page.latestResult.items) || []
+      items.forEach(item => {
+        next[item.questionId] = item.studentAnswer
+      })
+      this.answers = next
+    },
     resetAnswers(showMsg = true) {
       const next = {}
       ;(this.page.questions || []).forEach(question => {
@@ -236,6 +282,21 @@ export default {
       if (showMsg) {
         this.$message.success('已清空当前作答')
       }
+    },
+    startRedo() {
+      if (!this.page.allowRedo) {
+        return
+      }
+      this.viewMode = 'answer'
+      this.resetAnswers(false)
+      this.$router.replace({
+        path: this.$route.path,
+        query: Object.assign({}, this.$route.query, {
+          mode: 'answer',
+          reset: '1'
+        })
+      })
+      this.$message.success('已切换到重新作答模式')
     },
     submitHomework() {
       const missing = (this.page.questions || []).find(question => !this.answers[question.id])
@@ -259,6 +320,15 @@ export default {
           this.page.submitted = true
           this.page.latestResult = res.result
           this.page.canSubmit = !!res.result.allowRedo
+          this.viewMode = 'review'
+          this.fillAnswersFromLatest()
+          this.$router.replace({
+            path: this.$route.path,
+            query: Object.assign({}, this.$route.query, {
+              mode: 'review',
+              reset: '0'
+            })
+          })
         } else {
           this.$message.error(res.message)
         }

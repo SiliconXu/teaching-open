@@ -29,7 +29,14 @@
           <a-textarea v-decorator="['workDesc']" rows="4" placeholder="请输入作业描述"/>
         </a-form-item>
         <a-form-item label="作业封面" :labelCol="labelCol" :wrapperCol="wrapperCol">
-          <j-upload v-decorator="['workCover']" :number="1" :fileType="'image'" :trigger-change="true"></j-upload>
+          <j-upload
+            v-decorator="['workCover']"
+            :number="1"
+            :fileType="'image'"
+            :trigger-change="true"
+            :compressImage="true"
+            :imageMaxWidth="800"
+          ></j-upload>
         </a-form-item>
         <a-form-item label="作业资料" :labelCol="labelCol" :wrapperCol="wrapperCol">
           <j-upload v-decorator="['workDocumentUrl']" :number="1" :trigger-change="true"></j-upload>

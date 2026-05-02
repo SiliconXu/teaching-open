@@ -1,16 +1,10 @@
 <template>
   <div :class="['container']">
     <a-card class="search-card" :bordered="false">
-      <j-dict-select-tag
-        :defaultShowAll="true"
-        type="radioButton"
-        @change="handleChangeStatus"
-        v-model="queryParam.status"
-        :trigger-change="true"
-        :defaultDictOptions="[{title: '全部', text: '全部', description:'', value: ''},
-                        {title: '未提交', text: '未提交', description:'', value: 'false'},
-                        {title: '已提交', text: '已提交', description:'', value: 'true'}]"
-      />
+      <j-dict-select-tag :defaultShowAll="true" type="radioButton" @change="handleChangeStatus"
+        v-model="queryParam.status" :trigger-change="true" :defaultDictOptions="[{ title: '全部', text: '全部', description: '', value: '' },
+        { title: '未提交', text: '未提交', description: '', value: 'false' },
+        { title: '已提交', text: '已提交', description: '', value: 'true' }]" />
     </a-card>
     <a-divider />
     <a-card :bordered="false">
@@ -27,7 +21,7 @@
               </h3>
             </template>
             <template slot="description">
-              <pre class="work-desc">{{work.workDesc}}</pre>
+              <pre class="work-desc">{{ work.workDesc }}</pre>
               <div class="work-info">
                 <a-tag>班级：{{ work.departName }}</a-tag>
                 <a-divider type="vertical" />
@@ -42,16 +36,13 @@
           <div slot="extra" class="btns">
             <a-tooltip>
               <template slot="title">
-                <p>{{work.comment}}</p>
+                <p>{{ work.comment }}</p>
               </template>
               <a-rate v-if="work.score" :disabled="true" :value="work.score" />
             </a-tooltip>
             <a-button v-if="work.workDocumentUrl" @click="openWorkFile(work.workDocumentUrl)">作业资料</a-button>
             <!-- <a-divider v-if="work.workDocumentUrl != null" type="vertical" /> -->
-            <a-button
-              type="primary"
-              :disabled="work.assignmentMode === 'objective' ? (work.objectiveScore != null && !work.allowRedo) : work.mineWorkStatus > 1"
-              @click="toAdditionalWork(work, false)">
+            <a-button type="primary" @click="toAdditionalWork(work, false)">
               {{ actionText(work) }}
             </a-button>
             <a-divider v-if="showRedo(work)" type="vertical" />
@@ -60,7 +51,7 @@
         </a-list-item>
       </a-list>
     </a-card>
-    <TeachingWorkSubmitModal ref="submitModal"/>
+    <TeachingWorkSubmitModal ref="submitModal" />
   </div>
 </template>
 
@@ -87,7 +78,7 @@ export default {
         pageSize: 8,
       },
       loading: true,
-      queryParam: {status:'false'},
+      queryParam: { status: 'false' },
     }
   },
   created() {
@@ -97,7 +88,7 @@ export default {
     getFilePrevew,
     actionText(work) {
       if (work.assignmentMode === 'objective') {
-        return work.objectiveScore == null ? '开始答题' : '查看/重答'
+        return work.objectiveScore == null ? '开始答题' : '查看结果'
       }
       return work.mineWorkStatus == null ? '去做作业' : '修改作业'
     },
@@ -121,25 +112,27 @@ export default {
         this.loading = false
       })
     },
-     handleChangeStatus(v) {
+    handleChangeStatus(v) {
       this.queryParam.status = v.target.value
       this.getList()
     },
     openWorkFile(workUrl) {
-      if(workUrl.startsWith('aes')||workUrl.endsWith('ppt')||workUrl.endsWith('pptx')||workUrl.endsWith('doc')||workUrl.endsWith('docx')||workUrl.endsWith('xls')||workUrl.endsWith('xlsx')){
+      if (workUrl.startsWith('aes') || workUrl.endsWith('ppt') || workUrl.endsWith('pptx') || workUrl.endsWith('doc') || workUrl.endsWith('docx') || workUrl.endsWith('xls') || workUrl.endsWith('xlsx')) {
         window.open(getFilePrevew(workUrl))
-      }else{
+      } else {
         window.open(workUrl)
       }
     },
     toAdditionalWork(item, reset) {
       if (item.assignmentMode === 'objective') {
+        const mode = reset || item.objectiveScore == null ? 'answer' : 'review'
         this.$router.push({
           path: '/objective-homework',
           query: {
             sourceType: 'additional',
             sourceId: item.additionalWorkId,
             departId: item.departId,
+            mode,
             reset: reset ? '1' : '0'
           }
         })
@@ -167,7 +160,7 @@ export default {
             item.workName
           break
         case 3:
-          workUrl = '/scratchjr/editor.html?scene=additional&mode=edit&additionalId='+
+          workUrl = '/scratchjr/editor.html?scene=additional&mode=edit&additionalId=' +
             item.additionalWorkId +
             '&departId=' +
             item.departId +
@@ -186,18 +179,18 @@ export default {
         default:
           //workUrl = item.workUrl_url
           this.$refs.submitModal.open({
-            workName:item.workName,
+            workName: item.workName,
             additionalId: item.additionalWorkId,
             departId: item.departId,
-            workType:0
-           })
+            workType: 0
+          })
           return
       }
 
-      if(!reset && item.mineWorkUrl){
-        workUrl += "&workFile=" + item.mineWorkUrl;
-      }else{
-          workUrl += "&workFile=" + item.workUrl_url;
+      if (!reset && item.mineWorkUrl) {
+        workUrl += "&workFile=" + item.mineWorkUrl
+      } else if (item.workUrl) {
+        workUrl += "&workFile=" + getFileAccessHttpUrl(item.workUrl)
       }
       window.open(workUrl)
     },
@@ -206,13 +199,14 @@ export default {
 </script>
 
 <style lang="less" scoped>
-
 .ant-list-item {
   height: 180px;
+
   .work-cover {
-    height:150px;
+    height: 150px;
     max-width: 100%;
   }
+
   .title {
     display: block;
     margin-top: 20px;
@@ -223,6 +217,7 @@ export default {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
   .meta {
     margin-top: 8px;
     font-size: 12px;
@@ -231,21 +226,23 @@ export default {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .work-desc{
-    white-space:pre-wrap;
-    word-wrap:break-word;
+
+  .work-desc {
+    white-space: pre-wrap;
+    word-wrap: break-word;
     margin-right: 10px;
     max-height: 100px;
   }
-  .work-info{
 
-  }
-  .btns{
-    .ant-rate,.ant-btn{
+  .work-info {}
+
+  .btns {
+
+    .ant-rate,
+    .ant-btn {
       display: block;
       margin: 10px 0;
     }
   }
 }
-
 </style>

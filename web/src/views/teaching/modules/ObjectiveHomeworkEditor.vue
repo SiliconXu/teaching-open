@@ -795,7 +795,7 @@ answers:
         reader.onload = e => {
           const image = new Image()
           image.onload = () => {
-            const maxWidth = 1400
+            const maxWidth = 800
             const ratio = image.width > maxWidth ? maxWidth / image.width : 1
             const width = Math.round(image.width * ratio)
             const height = Math.round(image.height * ratio)

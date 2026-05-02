@@ -19,6 +19,7 @@ import org.jeecg.modules.teaching.entity.TeachingAdditionalWork;
 import org.jeecg.modules.teaching.enums.DepartDayLogType;
 import org.jeecg.modules.teaching.model.MineAdditionalWorkModel;
 import org.jeecg.modules.teaching.service.ITeachingAdditionalWorkService;
+import org.jeecg.modules.teaching.service.TeachingAssetCleanupService;
 import org.jeecg.modules.teaching.service.ITeachingDepartDayLogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -47,6 +48,8 @@ public class TeachingAdditionalWorkController extends JeecgController<TeachingAd
    private RedisUtil redisUtil;
    @Autowired
    private JdbcTemplate jdbcTemplate;
+   @Autowired
+   private TeachingAssetCleanupService teachingAssetCleanupService;
 
    @ApiOperation("获取附加作业详情")
    @GetMapping("getWorkInfo")
@@ -182,6 +185,7 @@ public class TeachingAdditionalWorkController extends JeecgController<TeachingAd
        }
        teachingAdditionalWorkService.updateById(teachingAdditionalWork);
        if (!"objective".equals(teachingAdditionalWork.getAssignmentMode())) {
+           teachingAssetCleanupService.cleanupObjectiveHomeworkAssets("additional", teachingAdditionalWork.getId());
            clearObjectiveHomework("additional", teachingAdditionalWork.getId());
        }
        return Result.ok("编辑成功!");
@@ -202,6 +206,7 @@ public class TeachingAdditionalWorkController extends JeecgController<TeachingAd
        if (permissionCheck != null) {
            return permissionCheck;
        }
+       teachingAssetCleanupService.cleanupAdditionalWorkAssets(oldWork);
        clearObjectiveHomework("additional", id);
        teachingAdditionalWorkService.removeById(id);
        return Result.ok("删除成功!");
@@ -223,6 +228,7 @@ public class TeachingAdditionalWorkController extends JeecgController<TeachingAd
            if (permissionCheck != null) {
                return permissionCheck;
            }
+           teachingAssetCleanupService.cleanupAdditionalWorkAssets(oldWork);
            clearObjectiveHomework("additional", id);
        }
        this.teachingAdditionalWorkService.removeByIds(Arrays.asList(ids.split(",")));

@@ -38,7 +38,14 @@
           <j-editor v-decorator="['courseDesc', { trigger: 'input' }]" />
         </a-form-item>
         <a-form-item label="课程封面" :labelCol="labelCol" :wrapperCol="wrapperCol">
-          <j-upload v-decorator="['courseCover', validatorRules.courseCover]"  :number="1" :trigger-change="true"></j-upload>
+          <j-upload
+            v-decorator="['courseCover', validatorRules.courseCover]"
+            :number="1"
+            :fileType="'image'"
+            :trigger-change="true"
+            :compressImage="true"
+            :imageMaxWidth="800"
+          ></j-upload>
         </a-form-item>
         <!-- <a-form-item label="课程图标" :labelCol="labelCol" :wrapperCol="wrapperCol">
           <j-upload v-decorator="[ 'courseIcon', validatorRules.courseIcon]"  :number="1" :trigger-change="true"></j-upload>

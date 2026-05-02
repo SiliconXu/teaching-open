@@ -24,7 +24,14 @@
           <a-textarea v-decorator="[ 'unitIntro', validatorRules.unitIntro]" placeholder="请输入单元简介"></a-textarea>
         </a-form-item>
         <a-form-item label="课程封面" :labelCol="labelCol" :wrapperCol="wrapperCol">
-          <j-upload v-decorator="['unitCover', validatorRules.unitCover]" :number="1" :trigger-change="true"></j-upload>
+          <j-upload
+            v-decorator="['unitCover', validatorRules.unitCover]"
+            :number="1"
+            :fileType="'image'"
+            :trigger-change="true"
+            :compressImage="true"
+            :imageMaxWidth="800"
+          ></j-upload>
         </a-form-item>
         <a-form-item label="课程视频" :labelCol="labelCol" :wrapperCol="wrapperCol">
           <a-card>
