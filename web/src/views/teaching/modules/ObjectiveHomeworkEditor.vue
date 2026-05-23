@@ -13,8 +13,8 @@
       <a-row :gutter="16">
         <a-col :span="12">
           <div class="setting-item">
-            <div class="label">允许学生重做</div>
-            <a-switch v-model="allowRedo" checkedChildren="允许" unCheckedChildren="不允许" />
+            <div class="label">可重做次数</div>
+            <a-input-number v-model="redoLimit" :min="0" :max="10" style="width: 120px" />
           </div>
         </a-col>
         <a-col :span="12">
@@ -506,7 +506,7 @@ export default {
   },
   data() {
     return {
-      allowRedo: false,
+      redoLimit: 1,
       showResultAfterSubmit: true,
       editorContent: '',
       parsedQuestions: [],
@@ -596,7 +596,11 @@ answers:
     },
     setValue(value) {
       const config = value || {}
-      this.allowRedo = config.allowRedo === true
+      if (config.redoLimit != null) {
+        this.redoLimit = Math.max(0, Number(config.redoLimit) || 0)
+      } else {
+        this.redoLimit = config.allowRedo === true ? 1 : 0
+      }
       this.showResultAfterSubmit = config.showResultAfterSubmit !== false
       this.editorContent = config.sourceMarkdown
         ? config.sourceMarkdown
@@ -667,7 +671,8 @@ answers:
     getValue() {
       const questions = this.buildQuestionsForSave()
       return {
-        allowRedo: this.allowRedo,
+        allowRedo: this.redoLimit > 0,
+        redoLimit: this.redoLimit,
         showResultAfterSubmit: this.showResultAfterSubmit,
         sourceMarkdown: this.editorContent,
         questionCount: questions.length,
@@ -795,7 +800,7 @@ answers:
         reader.onload = e => {
           const image = new Image()
           image.onload = () => {
-            const maxWidth = 800
+            const maxWidth = 1200
             const ratio = image.width > maxWidth ? maxWidth / image.width : 1
             const width = Math.round(image.width * ratio)
             const height = Math.round(image.height * ratio)
@@ -810,7 +815,7 @@ answers:
                 return
               }
               resolve(new File([blob], file.name, { type: blob.type || file.type, lastModified: Date.now() }))
-            }, file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.82)
+            }, file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.9)
           }
           image.onerror = () => resolve(file)
           image.src = e.target.result
@@ -888,14 +893,14 @@ answers:
   .editor-extra, .status-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
   .editor-tip { margin-bottom: 12px; color: #666; font-size: 12px; }
   .status-bar { margin-bottom: 12px; }
-  .split-layout { display: flex; gap: 16px; min-height: 680px; }
-  .pane { flex: 1; min-width: 0; border: 1px solid #f0f0f0; border-radius: 10px; background: #fff; }
-  .pane-editor, .pane-preview { padding: 12px; }
+  .split-layout { display: flex; gap: 16px; min-height: 680px; height: 680px; align-items: stretch; }
+  .pane { display: flex; flex: 1; min-width: 0; min-height: 0; border: 1px solid #f0f0f0; border-radius: 10px; background: #fff; }
+  .pane-editor, .pane-preview { display: flex; flex: 1; flex-direction: column; min-height: 0; padding: 12px; }
   .pane-preview { overflow: auto; background: linear-gradient(180deg, #fcfcfc 0%, #f8fafc 100%); }
   .pane-title { margin-bottom: 12px; font-weight: 600; color: #222; }
   .sticky { position: sticky; top: 0; z-index: 2; background: linear-gradient(180deg, #fcfcfc 0%, #f8fafc 100%); }
-  .markdown-editor { min-height: 620px; }
-  .markdown-editor /deep/ .full-screen-child { min-height: 620px; max-height: none; height: 620px; }
+  .markdown-editor { flex: 1; min-height: 0; }
+  .markdown-editor /deep/ .full-screen-child { min-height: 0; max-height: none; height: 100%; }
   .markdown-editor /deep/ .CodeMirror { height: 100%; font-size: 15px; line-height: 1.8; }
   .preview-question-card { padding: 16px; margin-bottom: 12px; border: 1px solid #eceff3; border-radius: 12px; background: #fff; }
   .preview-question-head, .preview-option-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

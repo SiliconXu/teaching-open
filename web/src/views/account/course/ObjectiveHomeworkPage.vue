@@ -11,7 +11,7 @@
           <div class="hero-stats">
             <a-tag color="blue">共 {{ page.questionCount || 0 }} 题</a-tag>
             <a-tag color="green">总分 {{ page.totalScore || 0 }} 分</a-tag>
-            <a-tag v-if="page.allowRedo" color="orange">允许重做</a-tag>
+            <a-tag v-if="page.redoLimit > 0" color="orange">可重做 {{ page.redoLimit }} 次</a-tag>
           </div>
         </div>
         <div v-if="page.documentUrl" class="doc-link">
@@ -40,7 +40,14 @@
 
         <div v-if="question.stemText" class="rich-content stem-text" v-html="renderRichText(question.stemText)"></div>
         <div v-if="splitImages(question.stemImages).length" class="image-grid">
-          <img v-for="(image, imageIndex) in splitImages(question.stemImages)" :key="imageIndex" :src="getFileAccessHttpUrl(image)" alt="题目图片" />
+          <img
+            v-for="(image, imageIndex) in splitImages(question.stemImages)"
+            :key="imageIndex"
+            :src="getFileAccessHttpUrl(image)"
+            alt="题目图片"
+            class="zoomable-image stem-image"
+            @click="previewImage(getFileAccessHttpUrl(image))"
+          />
         </div>
 
         <a-radio-group v-model="answers[question.id]" class="answer-group" :disabled="questionReadonly">
@@ -55,7 +62,12 @@
               <div v-if="option.optionText" class="option-text rich-content" v-html="renderRichText(option.optionText)"></div>
             </div>
             <div v-if="option.optionImage" class="option-image-wrap">
-              <img :src="getFileAccessHttpUrl(option.optionImage)" alt="选项图片" class="option-image" />
+              <img
+                :src="getFileAccessHttpUrl(option.optionImage)"
+                alt="选项图片"
+                class="option-image zoomable-image"
+                @click="previewImage(getFileAccessHttpUrl(option.optionImage))"
+              />
             </div>
           </a-radio>
         </a-radio-group>
@@ -69,7 +81,14 @@
           </div>
           <div v-if="item.stemText" class="rich-content stem-text" v-html="renderRichText(item.stemText)"></div>
           <div v-if="splitImages(item.stemImages).length" class="image-grid compact">
-            <img v-for="(image, imageIndex) in splitImages(item.stemImages)" :key="imageIndex" :src="getFileAccessHttpUrl(image)" alt="题目图片" />
+            <img
+              v-for="(image, imageIndex) in splitImages(item.stemImages)"
+              :key="imageIndex"
+              :src="getFileAccessHttpUrl(image)"
+              alt="题目图片"
+              class="zoomable-image stem-image compact-image"
+              @click="previewImage(getFileAccessHttpUrl(image))"
+            />
           </div>
           <div class="answer-line">你的答案：{{ answerLabel(item.studentAnswer) }}</div>
           <div class="answer-line">正确答案：{{ answerLabel(item.correctAnswer) }}</div>
@@ -78,14 +97,25 @@
             <div class="rich-content" v-html="renderRichText(item.analysisText)"></div>
           </div>
           <div v-if="splitImages(item.analysisImages).length" class="image-grid compact">
-            <img v-for="(image, imageIndex) in splitImages(item.analysisImages)" :key="imageIndex" :src="getFileAccessHttpUrl(image)" alt="解析图片" />
+            <img
+              v-for="(image, imageIndex) in splitImages(item.analysisImages)"
+              :key="imageIndex"
+              :src="getFileAccessHttpUrl(image)"
+              alt="解析图片"
+              class="zoomable-image compact-image"
+              @click="previewImage(getFileAccessHttpUrl(image))"
+            />
           </div>
         </div>
       </a-card>
 
+      <a-modal :visible="previewVisible" :footer="null" @cancel="closePreview" width="960px" centered>
+        <img v-if="previewImageUrl" :src="previewImageUrl" alt="预览图片" class="preview-modal-image" />
+      </a-modal>
+
       <div class="footer-actions">
         <a-button @click="reloadData">刷新</a-button>
-        <a-button v-if="page.allowRedo && page.submitted" @click="startRedo">重新作答</a-button>
+        <a-button v-if="page.remainingRedoCount > 0 && page.submitted" @click="startRedo">重新作答</a-button>
         <a-button v-if="showSubmitButton" type="primary" :loading="submitting" :disabled="submitDisabled" @click="submitHomework">
           {{ submitButtonText }}
         </a-button>
@@ -113,6 +143,8 @@ export default {
       loading: false,
       submitting: false,
       answers: {},
+      previewVisible: false,
+      previewImageUrl: '',
       page: {
         sourceType: '',
         sourceId: '',
@@ -121,6 +153,8 @@ export default {
         documentUrl: '',
         departId: '',
         allowRedo: true,
+        redoLimit: 1,
+        remainingRedoCount: 0,
         showResultAfterSubmit: true,
         questionCount: 0,
         totalScore: 0,
@@ -198,6 +232,12 @@ export default {
       getAction('/teaching/objectiveHomework/studentView', { sourceType, sourceId, departId }).then(res => {
         if (res.success) {
           this.page = Object.assign({}, this.page, res.result)
+          if (this.page.redoLimit == null) {
+            this.page.redoLimit = this.page.allowRedo ? 1 : 0
+          }
+          if (this.page.remainingRedoCount == null) {
+            this.page.remainingRedoCount = this.page.submitted ? Math.max(0, this.page.redoLimit - (this.page.latestResult ? this.page.latestResult.attemptNo : 0)) : this.page.redoLimit
+          }
           this.syncPageState()
         } else {
           this.$message.error(res.message)
@@ -245,13 +285,13 @@ export default {
     },
     syncPageState() {
       const wantsReset = this.$route.query.reset === '1'
-      if (wantsReset && this.page.allowRedo) {
+      if (wantsReset && this.page.remainingRedoCount > 0) {
         this.viewMode = 'answer'
         this.resetAnswers(false)
         return
       }
       if (this.page.submitted) {
-        if (this.viewMode === 'review' || !this.page.allowRedo) {
+        if (this.viewMode === 'review' || this.page.remainingRedoCount <= 0) {
           this.viewMode = 'review'
           this.fillAnswersFromLatest()
           return
@@ -283,8 +323,19 @@ export default {
         this.$message.success('已清空当前作答')
       }
     },
+    previewImage(url) {
+      if (!url) {
+        return
+      }
+      this.previewImageUrl = url
+      this.previewVisible = true
+    },
+    closePreview() {
+      this.previewVisible = false
+      this.previewImageUrl = ''
+    },
     startRedo() {
-      if (!this.page.allowRedo) {
+      if (this.page.remainingRedoCount <= 0) {
         return
       }
       this.viewMode = 'answer'
@@ -319,7 +370,9 @@ export default {
           this.$message.success('提交成功')
           this.page.submitted = true
           this.page.latestResult = res.result
-          this.page.canSubmit = !!res.result.allowRedo
+          this.page.remainingRedoCount = Number(res.result.remainingRedoCount || 0)
+          this.page.redoLimit = Number(res.result.redoLimit || this.page.redoLimit || 0)
+          this.page.canSubmit = this.page.remainingRedoCount > 0
           this.viewMode = 'review'
           this.fillAnswersFromLatest()
           this.$router.replace({
@@ -398,12 +451,13 @@ export default {
 
   .image-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 12px;
     margin-top: 12px;
 
     img {
       width: 100%;
+      max-width: 420px;
       border-radius: 10px;
       border: 1px solid #f0f0f0;
       background: #fff;
@@ -426,6 +480,39 @@ export default {
     border: 1px solid #f0f0f0;
     border-radius: 10px;
     background: #fcfcfc;
+  }
+
+  .answer-group /deep/ .ant-radio-wrapper-disabled {
+    color: #22304a;
+  }
+
+  .answer-group /deep/ .ant-radio-wrapper-disabled .ant-radio-disabled + span {
+    color: #22304a;
+  }
+
+  .answer-group /deep/ .ant-radio-disabled + span {
+    color: #22304a;
+  }
+
+  .answer-group /deep/ .ant-radio-disabled .ant-radio-inner {
+    border-color: #9bb7d7;
+    background: #ffffff;
+  }
+
+  .answer-group /deep/ .ant-radio-disabled.ant-radio-checked .ant-radio-inner {
+    border-color: #1677ff;
+    background: #1677ff;
+  }
+
+  .answer-group /deep/ .ant-radio-disabled.ant-radio-checked .ant-radio-inner::after {
+    background: #ffffff;
+    transform: scale(0.5);
+  }
+
+  .answer-group /deep/ .ant-radio-wrapper-disabled.answer-option {
+    background: #f8fbff;
+    border-color: #d7e6f7;
+    opacity: 1;
   }
 
   .option-row {
@@ -451,9 +538,36 @@ export default {
   }
 
   .option-image {
-    max-width: 280px;
+    max-width: 240px;
     border-radius: 8px;
     border: 1px solid #f0f0f0;
+  }
+
+  .stem-image {
+    max-width: 420px;
+  }
+
+  .compact-image {
+    max-width: 220px;
+  }
+
+  .zoomable-image {
+    cursor: zoom-in;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .zoomable-image:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  }
+
+  .preview-modal-image {
+    display: block;
+    width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+    margin: 0 auto;
   }
 
   .review-item {

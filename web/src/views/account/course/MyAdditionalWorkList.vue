@@ -18,6 +18,9 @@
                 <a-tag :color="work.assignmentMode === 'objective' ? 'gold' : 'blue'">
                   {{ work.assignmentMode === 'objective' ? '客观题' : work.codeType_dictText }}
                 </a-tag>
+                <a-tag v-if="work.assignmentMode === 'objective' && work.redoLimit > 0" color="orange">
+                  可重做 {{ work.redoLimit }} 次
+                </a-tag>
               </h3>
             </template>
             <template slot="description">
@@ -86,6 +89,18 @@ export default {
   },
   methods: {
     getFilePrevew,
+    normalizeSubmitStatus() {
+      if (this.queryParam.status === '') {
+        return undefined
+      }
+      if (this.queryParam.status === 'true' || this.queryParam.status === true) {
+        return true
+      }
+      if (this.queryParam.status === 'false' || this.queryParam.status === false) {
+        return false
+      }
+      return undefined
+    },
     actionText(work) {
       if (work.assignmentMode === 'objective') {
         return work.objectiveScore == null ? '开始答题' : '查看结果'
@@ -94,7 +109,7 @@ export default {
     },
     showRedo(work) {
       if (work.assignmentMode === 'objective') {
-        return !!work.allowRedo && work.objectiveScore != null
+        return Number(work.remainingRedoCount || 0) > 0 && work.objectiveScore != null
       }
       return work.mineWorkStatus != null && work.mineWorkStatus < 2
     },
@@ -103,7 +118,7 @@ export default {
       this.datasource = []
       getAction('/teaching/teachingWork/mineAdditionalWork', {
         pageSize: 999,
-        submit: this.queryParam.status
+        submit: this.normalizeSubmitStatus()
       }).then((res) => {
         console.log(res)
         if (res.success) {
@@ -126,7 +141,7 @@ export default {
     toAdditionalWork(item, reset) {
       if (item.assignmentMode === 'objective') {
         const mode = reset || item.objectiveScore == null ? 'answer' : 'review'
-        this.$router.push({
+        const routeData = this.$router.resolve({
           path: '/objective-homework',
           query: {
             sourceType: 'additional',
@@ -136,6 +151,7 @@ export default {
             reset: reset ? '1' : '0'
           }
         })
+        window.open(routeData.href, '_blank')
         return
       }
       console.log(item);

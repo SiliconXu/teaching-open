@@ -50,6 +50,9 @@ public class TeachingObjectiveHomework implements Serializable {
     @ApiModelProperty(value = "allowRedo")
     private Boolean allowRedo;
 
+    @ApiModelProperty(value = "redoLimit")
+    private Integer redoLimit;
+
     @ApiModelProperty(value = "showResultAfterSubmit")
     private Boolean showResultAfterSubmit;
 

@@ -66,6 +66,26 @@ PREPARE teaching_objective_homework_source_markdown_stmt FROM @teaching_objectiv
 EXECUTE teaching_objective_homework_source_markdown_stmt;
 DEALLOCATE PREPARE teaching_objective_homework_source_markdown_stmt;
 
+SET @teaching_objective_homework_redo_limit_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'teaching_objective_homework'
+      AND COLUMN_NAME = 'redo_limit'
+);
+SET @teaching_objective_homework_redo_limit_sql = IF(
+    @teaching_objective_homework_redo_limit_exists = 0,
+    'ALTER TABLE teaching_objective_homework ADD COLUMN redo_limit int DEFAULT 1 COMMENT ''redo limit'' AFTER allow_redo',
+    'SELECT 1'
+);
+PREPARE teaching_objective_homework_redo_limit_stmt FROM @teaching_objective_homework_redo_limit_sql;
+EXECUTE teaching_objective_homework_redo_limit_stmt;
+DEALLOCATE PREPARE teaching_objective_homework_redo_limit_stmt;
+
+UPDATE teaching_objective_homework
+SET redo_limit = CASE WHEN allow_redo = 1 THEN 1 ELSE 0 END
+WHERE redo_limit IS NULL;
+
 CREATE TABLE IF NOT EXISTS teaching_objective_question (
     id varchar(40) NOT NULL,
     homework_id varchar(40) NOT NULL,

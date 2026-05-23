@@ -262,7 +262,7 @@ docker cp teachingopen_db:/tmp/. /opt/teaching-open/db-backup-temp
 
 ```bash
 docker cp /opt/teaching-open/api/db/update3.0.sql teachingopen_db:/tmp/update3.0.sql
-docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot -pDragon#1 teachingopen < /tmp/update3.0.sql"
+docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot -pteachingopen teachingopen < /tmp/update3.0.sql"
 ```
 
 说明：

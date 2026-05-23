@@ -129,7 +129,7 @@ export default {
       model: {},
       currentAssignmentMode: 'file',
       objectiveConfig: {
-        allowRedo: false,
+        redoLimit: 1,
         showResultAfterSubmit: true,
         questions: []
       },
@@ -212,7 +212,7 @@ export default {
       this.visible = true
       this.currentAssignmentMode = this.model.assignmentMode || 'file'
       this.objectiveConfig = {
-        allowRedo: false,
+        redoLimit: 1,
         showResultAfterSubmit: true,
         questions: []
       }

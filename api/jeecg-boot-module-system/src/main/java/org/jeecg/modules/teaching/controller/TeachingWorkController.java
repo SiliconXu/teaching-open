@@ -193,23 +193,31 @@ public class TeachingWorkController extends BaseController {
 			 }
 			 if (StringUtils.equals("objective", assignmentMode)) {
 				 List<Map<String, Object>> homeworkRows = jdbcTemplate.queryForList(
-					 "select id, allow_redo, total_score from teaching_objective_homework where source_type=? and source_id=? limit 1",
+					 "select id, allow_redo, redo_limit, total_score from teaching_objective_homework where source_type=? and source_id=? limit 1",
 					 "additional", work.getAdditionalWorkId());
 				 if (!homeworkRows.isEmpty()) {
 					 Map<String, Object> homework = homeworkRows.get(0);
-					 item.put("allowRedo", toBool(homework.get("allow_redo")));
+					 Integer redoLimitObj = toInteger(homework.get("redo_limit"));
+					 int redoLimit = redoLimitObj == null ? 0 : redoLimitObj;
+					 if (redoLimit <= 0 && toBool(homework.get("allow_redo"))) {
+						 redoLimit = 1;
+					 }
+					 item.put("allowRedo", redoLimit > 0);
+					 item.put("redoLimit", redoLimit);
 					 item.put("objectiveTotalScore", toInteger(homework.get("total_score")));
 					 List<Map<String, Object>> submitRows = jdbcTemplate.queryForList(
 						 "select id, objective_score, right_count, question_count from teaching_objective_submit where homework_id=? and student_id=? and depart_id=? order by attempt_no desc, submitted_at desc, create_time desc limit 1",
 						 String.valueOf(homework.get("id")), userId, work.getDepartId());
 					 if (!submitRows.isEmpty()) {
 						 Map<String, Object> latest = submitRows.get(0);
+						 item.put("remainingRedoCount", Math.max(0, redoLimit - toInteger(latest.get("attempt_no"))));
 						 item.put("objectiveSubmitId", latest.get("id"));
 						 item.put("objectiveScore", toInteger(latest.get("objective_score")));
 						 item.put("objectiveRightCount", toInteger(latest.get("right_count")));
 						 item.put("objectiveQuestionCount", toInteger(latest.get("question_count")));
 						 item.put("mineWorkStatus", 1);
 					 } else {
+						 item.put("remainingRedoCount", redoLimit);
 						 item.put("mineWorkStatus", null);
 					 }
 				 }
@@ -261,6 +269,7 @@ public class TeachingWorkController extends BaseController {
 				 oldWorks = teachingWorkService.getBaseMapper().selectByMap(new HashMap<String, Object>() {{
 					 put("user_id", getCurrentUser().getId());
 					 put("additional_id", teachingWork.getAdditionalId());
+					 put("depart_id", teachingWork.getDepartId());
 				 }});
 			 }else if(isNotEmpty(teachingWork.getCourseId())){
 				 oldWorks = teachingWorkService.getBaseMapper().selectByMap(new HashMap<String, Object>() {{

@@ -31,23 +31,28 @@
 
     <select id="userAdditionalWork" resultType="org.jeecg.modules.teaching.model.AdditionalWorkModel">
         select a.*, a.id additionalWorkId,
+        d.depart_id departId,
+        sd.depart_name departName,
         w.id mineWorkId, w.work_name mineWorkName, w.work_status mineWorkStatus,
         w.work_file mineWorkUrl,
         w.work_cover mineWorkCover,
         c.score, c.comment
         from teaching_additional_work a
-        left join teaching_work w on w.additional_id = a.id and w.user_id = #{userId}
+        join (
+        <foreach collection="departIds" index="index" item="id" separator=" union all ">
+            select #{id} as depart_id
+        </foreach>
+        ) d on find_in_set(d.depart_id, replace(ifnull(a.work_dept,''), ' ', '')) > 0
+        left join sys_depart sd on sd.id = d.depart_id
+        left join teaching_work w on w.additional_id = a.id and w.user_id = #{userId} and w.depart_id = d.depart_id
         left join teaching_work_correct c on c.work_id = w.id
         where
-        a.status=1 and
-        <foreach collection="departIds" index="index" item="id" open="(" separator=" or " close=")">
-            a.work_dept like CONCAT('%',#{id},'%')
-        </foreach>
+        a.status=1
         <if test="submit==true">
             and w.work_status >= 1
         </if>
         <if test="submit==false">
-            and w.id is null or w.work_status <![CDATA[<]]> 1
+            and (w.id is null or w.work_status <![CDATA[<]]> 1)
         </if>
         <if test="submit==true and status != null">
             and w.work_status = #{status}

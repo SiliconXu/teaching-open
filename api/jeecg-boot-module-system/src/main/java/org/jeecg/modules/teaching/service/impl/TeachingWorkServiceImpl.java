@@ -176,30 +176,18 @@ public class TeachingWorkServiceImpl extends ServiceImpl<TeachingWorkMapper, Tea
 
 	@Override
 	public List<AdditionalWorkModel> userAdditionalWork(String userId, String departId, Boolean submit, Integer status) {
-		//有2个问题：
-		// 1.如果学生班级有相同课程，那么学生提交的作业无法区分班级
-		// 2.如果布置的作业同时在学生的两个班级，那么班级名无法区分
-
 		List<SysDepart> mineClassrooms = new ArrayList<>();
 		mineClassrooms = sysDepartMapper.queryUserClassroom(userId);
 		if (!StringUtils.isEmpty(departId)){
-			mineClassrooms.stream().filter(sysDepart -> sysDepart.getId().equals(departId));
+			mineClassrooms = mineClassrooms.stream()
+				.filter(sysDepart -> departId.equals(sysDepart.getId()))
+				.collect(Collectors.toList());
 		}
 		if(mineClassrooms == null || mineClassrooms.size()==0){
 			return new ArrayList<>();
 		}
-		List departIds = mineClassrooms.stream().map(SysDepart::getId).collect(Collectors.toList());
-		List<AdditionalWorkModel> additionalWorkModels = this.baseMapper.userAdditionalWork(userId, departIds, submit, status);
-		//step 封装班级信息
-		for (AdditionalWorkModel workModel: additionalWorkModels){
-			for (SysDepart depart: mineClassrooms){
-				if (workModel.getWorkDept().contains(depart.getId())){
-					workModel.setDepartId(depart.getId());
-					workModel.setDepartName(depart.getDepartName());
-				}
-			}
-		}
-		return additionalWorkModels;
+		List<String> departIds = mineClassrooms.stream().map(SysDepart::getId).collect(Collectors.toList());
+		return this.baseMapper.userAdditionalWork(userId, departIds, submit, status);
 	}
 
 }

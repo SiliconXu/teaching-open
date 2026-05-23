@@ -42,7 +42,7 @@
                   {{ objectiveActionText }}
                 </a-button>
                 <a-button
-                  v-if="unit.assignmentMode === 'objective' && objectiveState.submitted && objectiveState.allowRedo"
+                  v-if="unit.assignmentMode === 'objective' && objectiveState.submitted && objectiveState.remainingRedoCount > 0"
                   style="margin-left: 8px"
                   @click="handleViewCode(unit, true)">
                   重做
@@ -95,6 +95,8 @@ export default {
       objectiveState: {
         submitted: false,
         allowRedo: false,
+        redoLimit: 1,
+        remainingRedoCount: 0,
       },
     }
   },
@@ -131,10 +133,12 @@ export default {
     view(unit){
       this.visible = true;
       this.unit = unit
-      this.objectiveState = {
-        submitted: false,
-        allowRedo: false,
-      }
+        this.objectiveState = {
+          submitted: false,
+          allowRedo: false,
+          redoLimit: 1,
+          remainingRedoCount: 0,
+        }
       if (unit.assignmentMode === 'objective') {
         this.loadObjectiveState(unit)
       }
@@ -153,6 +157,8 @@ export default {
           this.objectiveState = {
             submitted: !!res.result.submitted,
             allowRedo: !!res.result.allowRedo,
+            redoLimit: Number(res.result.redoLimit || 0),
+            remainingRedoCount: Number(res.result.remainingRedoCount || 0),
           }
         }
       })

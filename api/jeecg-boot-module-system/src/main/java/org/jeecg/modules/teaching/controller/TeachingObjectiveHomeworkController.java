@@ -105,7 +105,9 @@ public class TeachingObjectiveHomeworkController extends BaseController {
             JSONObject result = new JSONObject(true);
             result.put("sourceType", sourceType);
             result.put("sourceId", sourceId);
-            result.put("allowRedo", homework == null ? Boolean.FALSE : toBool(homework.get("allow_redo")));
+            int redoLimit = homework == null ? 0 : normalizeRedoLimit(homework);
+            result.put("redoLimit", redoLimit);
+            result.put("allowRedo", redoLimit > 0);
             result.put("showResultAfterSubmit", homework == null ? Boolean.TRUE : toBool(homework.get("show_result_after_submit")));
             result.put("questionCount", homework == null ? 0 : toInt(homework.get("question_count")));
             result.put("totalScore", homework == null ? 0 : toInt(homework.get("total_score")));
@@ -136,15 +138,19 @@ public class TeachingObjectiveHomeworkController extends BaseController {
             result.put("description", context.getString("description"));
             result.put("documentUrl", context.getString("documentUrl"));
             result.put("departId", context.getString("departId"));
-            result.put("allowRedo", toBool(homework.get("allow_redo")));
+            int redoLimit = normalizeRedoLimit(homework);
+            result.put("redoLimit", redoLimit);
+            result.put("allowRedo", redoLimit > 0);
             result.put("showResultAfterSubmit", toBool(homework.get("show_result_after_submit")));
             result.put("questionCount", toInt(homework.get("question_count")));
             result.put("totalScore", toInt(homework.get("total_score")));
             result.put("questions", loadQuestions(String.valueOf(homework.get("id")), false));
             Map<String, Object> latestSubmit = queryLatestSubmit(String.valueOf(homework.get("id")), userId, context.getString("departId"));
             boolean submitted = latestSubmit != null;
+            int remainingRedoCount = latestSubmit == null ? redoLimit : Math.max(0, redoLimit - toInt(latestSubmit.get("attempt_no")));
             result.put("submitted", submitted);
-            result.put("canSubmit", !submitted || toBool(homework.get("allow_redo")));
+            result.put("remainingRedoCount", remainingRedoCount);
+            result.put("canSubmit", !submitted || remainingRedoCount > 0);
             if (submitted) {
                 result.put("latestResult", buildSubmitResult(homework, latestSubmit, toBool(homework.get("show_result_after_submit"))));
             }
@@ -170,7 +176,9 @@ public class TeachingObjectiveHomeworkController extends BaseController {
                 return Result.error("objective config not found");
             }
             Map<String, Object> latestSubmit = queryLatestSubmit(String.valueOf(homework.get("id")), userId, context.getString("departId"));
-            if (latestSubmit != null && !toBool(homework.get("allow_redo"))) {
+            int redoLimit = normalizeRedoLimit(homework);
+            int latestAttemptNo = latestSubmit == null ? 0 : toInt(latestSubmit.get("attempt_no"));
+            if (latestSubmit != null && latestAttemptNo >= (redoLimit + 1)) {
                 return Result.error("redo is disabled");
             }
             JSONArray questionList = loadQuestions(String.valueOf(homework.get("id")), true);
@@ -188,7 +196,7 @@ public class TeachingObjectiveHomeworkController extends BaseController {
                 }
             }
             String submitId = nextId();
-            int attemptNo = latestSubmit == null ? 1 : toInt(latestSubmit.get("attempt_no")) + 1;
+            int attemptNo = latestAttemptNo + 1;
             Timestamp now = now();
             jdbcTemplate.update(
                 "insert into teaching_objective_submit (id, create_by, create_time, update_by, update_time, sys_org_code, homework_id, source_type, source_id, student_id, depart_id, submit_status, objective_score, right_count, question_count, attempt_no, submitted_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -228,7 +236,8 @@ public class TeachingObjectiveHomeworkController extends BaseController {
         Map<String, Object> existing = queryOne("select * from teaching_objective_homework where source_type=? and source_id=? limit 1", sourceType, sourceId);
         String homeworkId = existing == null ? nextId() : String.valueOf(existing.get("id"));
         clearHomework(homeworkId);
-        boolean allowRedo = config.getBoolean("allowRedo") != null && config.getBoolean("allowRedo");
+        int redoLimit = normalizeRedoLimit(config);
+        boolean allowRedo = redoLimit > 0;
         boolean showResultAfterSubmit = config.getBoolean("showResultAfterSubmit") == null || config.getBoolean("showResultAfterSubmit");
         String sourceMarkdown = trimToNull(config.getString("sourceMarkdown"));
         int totalScore = 0;
@@ -238,13 +247,13 @@ public class TeachingObjectiveHomeworkController extends BaseController {
         Timestamp now = now();
         if (existing == null) {
             jdbcTemplate.update(
-                "insert into teaching_objective_homework (id, create_by, create_time, update_by, update_time, sys_org_code, source_type, source_id, allow_redo, show_result_after_submit, question_count, total_score, source_markdown) values (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "insert into teaching_objective_homework (id, create_by, create_time, update_by, update_time, sys_org_code, source_type, source_id, allow_redo, redo_limit, show_result_after_submit, question_count, total_score, source_markdown) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 homeworkId, getCurrentUser().getUsername(), now, getCurrentUser().getUsername(), now, getCurrentUser().getOrgCode(),
-                sourceType, sourceId, allowRedo ? 1 : 0, showResultAfterSubmit ? 1 : 0, normalizedQuestions.size(), totalScore, sourceMarkdown);
+                sourceType, sourceId, allowRedo ? 1 : 0, redoLimit, showResultAfterSubmit ? 1 : 0, normalizedQuestions.size(), totalScore, sourceMarkdown);
         } else {
             jdbcTemplate.update(
-                "update teaching_objective_homework set update_by=?, update_time=?, allow_redo=?, show_result_after_submit=?, question_count=?, total_score=?, source_markdown=? where id=?",
-                getCurrentUser().getUsername(), now, allowRedo ? 1 : 0, showResultAfterSubmit ? 1 : 0, normalizedQuestions.size(), totalScore, sourceMarkdown, homeworkId);
+                "update teaching_objective_homework set update_by=?, update_time=?, allow_redo=?, redo_limit=?, show_result_after_submit=?, question_count=?, total_score=?, source_markdown=? where id=?",
+                getCurrentUser().getUsername(), now, allowRedo ? 1 : 0, redoLimit, showResultAfterSubmit ? 1 : 0, normalizedQuestions.size(), totalScore, sourceMarkdown, homeworkId);
         }
         for (int i = 0; i < normalizedQuestions.size(); i++) {
             JSONObject question = normalizedQuestions.getJSONObject(i);
@@ -422,7 +431,9 @@ public class TeachingObjectiveHomeworkController extends BaseController {
         result.put("submitId", submit.get("id"));
         result.put("sourceType", submit.get("source_type"));
         result.put("sourceId", submit.get("source_id"));
-        result.put("allowRedo", toBool(homework.get("allow_redo")));
+        int redoLimit = normalizeRedoLimit(homework);
+        result.put("redoLimit", redoLimit);
+        result.put("allowRedo", redoLimit > 0);
         result.put("showResultAfterSubmit", toBool(homework.get("show_result_after_submit")));
         result.put("submitted", true);
         result.put("objectiveScore", toInt(submit.get("objective_score")));
@@ -430,32 +441,33 @@ public class TeachingObjectiveHomeworkController extends BaseController {
         result.put("rightCount", toInt(submit.get("right_count")));
         result.put("questionCount", toInt(submit.get("question_count")));
         result.put("attemptNo", toInt(submit.get("attempt_no")));
+        result.put("remainingRedoCount", Math.max(0, redoLimit - toInt(submit.get("attempt_no"))));
         result.put("submittedAt", submit.get("submitted_at"));
         JSONArray items = new JSONArray();
-        if (includeItems) {
-            List<Map<String, Object>> itemRows = queryList("select * from teaching_objective_submit_item where submit_id=?", String.valueOf(submit.get("id")));
-            List<JSONObject> parsed = new ArrayList<>();
-            for (Map<String, Object> itemRow : itemRows) {
-                JSONObject snapshot = JSON.parseObject(String.valueOf(itemRow.get("question_snapshot_json")));
-                JSONObject item = new JSONObject(true);
-                item.put("questionId", itemRow.get("question_id"));
-                item.put("questionNo", snapshot.getInteger("questionNo"));
-                item.put("questionType", snapshot.getString("questionType"));
+        List<Map<String, Object>> itemRows = queryList("select * from teaching_objective_submit_item where submit_id=?", String.valueOf(submit.get("id")));
+        List<JSONObject> parsed = new ArrayList<>();
+        for (Map<String, Object> itemRow : itemRows) {
+            JSONObject snapshot = JSON.parseObject(String.valueOf(itemRow.get("question_snapshot_json")));
+            JSONObject item = new JSONObject(true);
+            item.put("questionId", itemRow.get("question_id"));
+            item.put("questionNo", snapshot.getInteger("questionNo"));
+            item.put("questionType", snapshot.getString("questionType"));
+            item.put("studentAnswer", itemRow.get("student_answer"));
+            item.put("correct", toBool(itemRow.get("is_correct")));
+            item.put("score", snapshot.getInteger("score"));
+            item.put("awardedScore", toInt(itemRow.get("awarded_score")));
+            if (includeItems) {
                 item.put("stemText", snapshot.getString("stemText"));
                 item.put("stemImages", snapshot.getString("stemImages"));
                 item.put("correctAnswer", snapshot.getString("correctAnswer"));
-                item.put("studentAnswer", itemRow.get("student_answer"));
-                item.put("correct", toBool(itemRow.get("is_correct")));
-                item.put("score", snapshot.getInteger("score"));
-                item.put("awardedScore", toInt(itemRow.get("awarded_score")));
                 item.put("analysisText", snapshot.getString("analysisText"));
                 item.put("analysisImages", snapshot.getString("analysisImages"));
                 item.put("options", snapshot.getJSONArray("options"));
-                parsed.add(item);
             }
-            parsed.sort(Comparator.comparing(o -> o.getInteger("questionNo")));
-            parsed.forEach(items::add);
+            parsed.add(item);
         }
+        parsed.sort(Comparator.comparing(o -> o.getInteger("questionNo")));
+        parsed.forEach(items::add);
         result.put("items", items);
         return result;
     }
@@ -559,6 +571,31 @@ public class TeachingObjectiveHomeworkController extends BaseController {
         }
         String normalized = String.valueOf(value);
         return StringUtils.equalsIgnoreCase(normalized, "1") || StringUtils.equalsIgnoreCase(normalized, "true");
+    }
+
+    private int normalizeRedoLimit(Map<String, Object> homework) {
+        if (homework == null) {
+            return 0;
+        }
+        Object redoLimit = homework.get("redo_limit");
+        if (redoLimit != null) {
+            return Math.max(0, toInt(redoLimit));
+        }
+        return toBool(homework.get("allow_redo")) ? 1 : 0;
+    }
+
+    private int normalizeRedoLimit(JSONObject config) {
+        if (config == null) {
+            return 0;
+        }
+        if (config.containsKey("redoLimit")) {
+            Integer value = config.getInteger("redoLimit");
+            return Math.max(0, value == null ? 0 : value);
+        }
+        if (config.containsKey("allowRedo")) {
+            return config.getBooleanValue("allowRedo") ? 1 : 0;
+        }
+        return 1;
     }
 
     private Integer toInt(Object value) {
