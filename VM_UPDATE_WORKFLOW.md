@@ -162,13 +162,13 @@ powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action backend
 
 最简单直接执行：
 
-```powershell
+```bash
 powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action full
 ```
 
 或者分别执行：
 
-```powershell
+```bash
 powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action backend
 powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action frontend
 ```
@@ -191,10 +191,11 @@ powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action frontend
 scp -P 8922 api/jeecg-boot-module-system/target/teaching-open-2.8.0.jar siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/api/jeecg-boot-module-system/target/
 ```
 
-### 4.2 上传前端 dist
+### 4.2 上传前端 dist 压缩包
 
 ```bash
-scp -P 8922 -r web/dist siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/web/
+tar -czf web-dist.tar.gz -C web dist
+scp -P 8922 web-dist.tar.gz siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/web/
 ```
 
 ### 4.3 如果这次改了 SQL 文件
@@ -242,6 +243,15 @@ git pull
 - 服务器上的 Docker 容器只使用本地上传后的 `jar` 和 `dist` 来构建本地镜像
 - 不依赖任何业务远程镜像仓库里的 `teaching-open-api` 或 `teaching-open-web`
 - 因此 `docker build` 的镜像名、`docker-compose.yml` 里的镜像名，必须保持一致
+
+如果这次上传了前端压缩包，服务器上先解压：
+
+```bash
+cd /opt/teaching-open/web
+rm -rf dist
+tar -xzf web-dist.tar.gz
+cd /opt/teaching-open
+```
 
 ---
 
@@ -304,7 +314,7 @@ docker build -t teaching-open-web:latest -f web/Dockerfile web
 
 ```bash
 cd /opt/teaching-open
-docker build -t teaching-open-db:latest -f api/Dockerfile.db api
+docker build -t registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-db:latest -f api/Dockerfile.db api
 ```
 
 一般日常更新不用这一步。
@@ -408,7 +418,8 @@ docker compose logs -f web
 ```powershell
 cd D:\ext-dev\teaching-open
 powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action frontend
-scp -P 8922 -r web/dist siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/web/
+tar -czf web-dist.tar.gz -C web dist
+scp -P 8922 web-dist.tar.gz siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/web/
 ```
 
 服务器：
@@ -417,6 +428,10 @@ scp -P 8922 -r web/dist siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/web/
 ssh -p 8922 siliconxu@siliconxu.asuscomm.com
 cd /opt/teaching-open
 git pull
+cd /opt/teaching-open/web
+rm -rf dist
+tar -xzf web-dist.tar.gz
+cd /opt/teaching-open
 docker build -t teaching-open-web:latest -f web/Dockerfile web
 cd /opt/teaching-open/deploy
 docker compose up -d --force-recreate --no-deps web
@@ -453,7 +468,8 @@ docker compose ps
 cd D:\ext-dev\teaching-open
 powershell -ExecutionPolicy Bypass -File .\dev-docker.ps1 -Action full
 scp -P 8922 api/jeecg-boot-module-system/target/teaching-open-2.8.0.jar siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/api/jeecg-boot-module-system/target/
-scp -P 8922 -r web/dist siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/web/
+tar -czf web-dist.tar.gz -C web dist
+scp -P 8922 web-dist.tar.gz siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/web/
 ```
 
 服务器：
@@ -462,6 +478,10 @@ scp -P 8922 -r web/dist siliconxu@siliconxu.asuscomm.com:/opt/teaching-open/web/
 ssh -p 8922 siliconxu@siliconxu.asuscomm.com
 cd /opt/teaching-open
 git pull
+cd /opt/teaching-open/web
+rm -rf dist
+tar -xzf web-dist.tar.gz
+cd /opt/teaching-open
 docker build -t teaching-open-api:latest -f api/Dockerfile api
 docker build -t teaching-open-web:latest -f web/Dockerfile web
 cd /opt/teaching-open/deploy

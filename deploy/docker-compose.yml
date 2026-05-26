@@ -2,7 +2,7 @@ version: "3"
 
 services:
   db:
-    image: teaching-open-db:latest
+    image: registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-db:latest
     container_name: teachingopen_db
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-teachingopen}

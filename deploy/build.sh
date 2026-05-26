@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "build db ..."
-docker build -t "teaching-open-db:latest" -f "$ROOT_DIR/api/Dockerfile.db" "$ROOT_DIR/api"
+docker build -t "registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-db:latest" -f "$ROOT_DIR/api/Dockerfile.db" "$ROOT_DIR/api"
 
 echo "build api ..."
 docker build -t "teaching-open-api:builder" -f "$ROOT_DIR/api/Dockerfile.builder" "$ROOT_DIR/api"
