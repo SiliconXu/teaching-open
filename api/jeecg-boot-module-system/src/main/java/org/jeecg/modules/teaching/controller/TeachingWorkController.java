@@ -206,7 +206,7 @@ public class TeachingWorkController extends BaseController {
 					 item.put("redoLimit", redoLimit);
 					 item.put("objectiveTotalScore", toInteger(homework.get("total_score")));
 					 List<Map<String, Object>> submitRows = jdbcTemplate.queryForList(
-						 "select id, objective_score, right_count, question_count from teaching_objective_submit where homework_id=? and student_id=? and depart_id=? order by attempt_no desc, submitted_at desc, create_time desc limit 1",
+						 "select id, attempt_no, objective_score, right_count, question_count from teaching_objective_submit where homework_id=? and student_id=? and depart_id=? order by attempt_no desc, submitted_at desc, create_time desc limit 1",
 						 String.valueOf(homework.get("id")), userId, work.getDepartId());
 					 if (!submitRows.isEmpty()) {
 						 Map<String, Object> latest = submitRows.get(0);
