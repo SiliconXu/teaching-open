@@ -7,6 +7,7 @@ import org.jeecg.modules.system.entity.SysUser;
 import org.jeecg.modules.system.mapper.SysDepartMapper;
 import org.jeecg.modules.system.mapper.SysUserMapper;
 import org.jeecg.modules.system.service.ISysFileService;
+import org.jeecg.modules.system.service.ISysUserDepartService;
 import org.jeecg.modules.teaching.entity.TeachingWork;
 import org.jeecg.modules.teaching.entity.TeachingWorkCorrect;
 import org.jeecg.modules.teaching.entity.TeachingWorkComment;
@@ -48,6 +49,8 @@ public class TeachingWorkServiceImpl extends ServiceImpl<TeachingWorkMapper, Tea
 	private TeachingWorkCommentMapper teachingWorkCommentMapper;
 	@Autowired
 	private ISysFileService sysFileService;
+	@Autowired
+	private ISysUserDepartService sysUserDepartService;
 
 
 	@Override
@@ -176,17 +179,21 @@ public class TeachingWorkServiceImpl extends ServiceImpl<TeachingWorkMapper, Tea
 
 	@Override
 	public List<AdditionalWorkModel> userAdditionalWork(String userId, String departId, Boolean submit, Integer status) {
-		List<SysDepart> mineClassrooms = new ArrayList<>();
-		mineClassrooms = sysDepartMapper.queryUserClassroom(userId);
-		if (!StringUtils.isEmpty(departId)){
-			mineClassrooms = mineClassrooms.stream()
-				.filter(sysDepart -> departId.equals(sysDepart.getId()))
-				.collect(Collectors.toList());
+		List<String> departIds = sysUserDepartService.userDepartIds(userId);
+		if (departIds == null || departIds.isEmpty()) {
+			List<SysDepart> mineClassrooms = sysDepartMapper.queryUserClassroom(userId);
+			if (mineClassrooms != null && !mineClassrooms.isEmpty()) {
+				departIds = mineClassrooms.stream().map(SysDepart::getId).collect(Collectors.toList());
+			}
 		}
-		if(mineClassrooms == null || mineClassrooms.size()==0){
+		if (!StringUtils.isEmpty(departId) && departIds != null) {
+			departIds = departIds.stream().filter(id -> departId.equals(id)).distinct().collect(Collectors.toList());
+		} else if (departIds != null) {
+			departIds = departIds.stream().distinct().collect(Collectors.toList());
+		}
+		if(departIds == null || departIds.size()==0){
 			return new ArrayList<>();
 		}
-		List<String> departIds = mineClassrooms.stream().map(SysDepart::getId).collect(Collectors.toList());
 		return this.baseMapper.userAdditionalWork(userId, departIds, submit, status);
 	}
 

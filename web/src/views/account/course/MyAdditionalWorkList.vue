@@ -81,7 +81,7 @@ export default {
         pageSize: 8,
       },
       loading: true,
-      queryParam: { status: 'false' },
+      queryParam: { status: '' },
     }
   },
   created() {

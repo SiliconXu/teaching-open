@@ -66,9 +66,14 @@
         </div>
 
         <div ref="previewScroll" class="pane pane-preview" @scroll="handlePreviewScroll">
-          <div class="pane-title sticky">实时预览</div>
+          <div ref="previewTitle" class="pane-title sticky">实时预览</div>
           <a-empty v-if="!parsedQuestions.length && !parseError" description="开始输入后，这里会显示试卷效果" />
-          <div v-for="(question, index) in parsedQuestions" :key="question._key || index" class="preview-question-card">
+          <div
+            v-for="(question, index) in parsedQuestions"
+            :key="question._key || index"
+            ref="previewQuestionCards"
+            class="preview-question-card"
+          >
             <div class="preview-question-head">
               <div>第 {{ index + 1 }} 题 · {{ question.questionType === 'judge' ? '判断题' : '选择题' }}</div>
               <div class="preview-head-right">
@@ -272,6 +277,8 @@ function createQuestion(type) {
     correctAnswer: type === 'judge' ? 'T' : 'A',
     options: [],
     _hasAnswer: false,
+    _sourceStartLine: 0,
+    _sourceEndLine: 0,
   }
 }
 
@@ -284,7 +291,7 @@ function buildOption(optionMarkdown, index) {
   }
 }
 
-function parseQuestionBlock(block, sectionType, answerMap) {
+function parseQuestionBlock(block, sectionType, answerMap, blockMeta = {}) {
   const normalizedBlock = String(block || '').trim()
   if (!normalizedBlock) {
     return null
@@ -373,6 +380,8 @@ function parseQuestionBlock(block, sectionType, answerMap) {
   question.analysisText = markdownToHtml(analysisLines.join('\n').trim())
   question.score = Number(answerInfo[1]) || 5
   question._hasAnswer = answerInfo.length > 0
+  question._sourceStartLine = Number(blockMeta.startLine) || 0
+  question._sourceEndLine = Number(blockMeta.endLine) || question._sourceStartLine
 
   if (questionType === 'judge') {
     question.correctAnswer = normalizeJudgeAnswer(answerInfo[0]) || 'T'
@@ -395,38 +404,51 @@ function parseObjectiveDocument(content) {
   const blocks = []
   let sectionType = 'single'
   let currentBlock = []
+  let currentBlockStartLine = null
   let inCodeBlock = false
 
-  const pushBlock = () => {
+  const pushBlock = endLine => {
     const text = currentBlock.join('\n').trim()
     if (text) {
-      blocks.push({ sectionType, content: text })
+      blocks.push({
+        sectionType,
+        content: text,
+        startLine: currentBlockStartLine == null ? 0 : currentBlockStartLine,
+        endLine: endLine == null ? currentBlockStartLine || 0 : endLine,
+      })
     }
     currentBlock = []
+    currentBlockStartLine = null
   }
 
-  lines.forEach(line => {
+  lines.forEach((line, lineIndex) => {
     const trimmed = line.trim()
     if (/^```\s*([A-Za-z0-9_-]+)?\s*$/.test(trimmed)) {
       inCodeBlock = !inCodeBlock
+      if (currentBlockStartLine == null) {
+        currentBlockStartLine = lineIndex
+      }
       currentBlock.push(line)
       return
     }
     const headingMatch = trimmed.match(/^##\s*(.+)$/)
     if (!inCodeBlock && headingMatch) {
-      pushBlock()
+      pushBlock(lineIndex - 1)
       sectionType = headingMatch[1].indexOf('判断') >= 0 ? 'judge' : 'single'
       return
     }
     if (!inCodeBlock && /^---+\s*$/.test(trimmed)) {
-      pushBlock()
+      pushBlock(lineIndex - 1)
       return
+    }
+    if (currentBlockStartLine == null) {
+      currentBlockStartLine = lineIndex
     }
     currentBlock.push(line)
   })
-  pushBlock()
+  pushBlock(lines.length - 1)
 
-  return blocks.map(item => parseQuestionBlock(item.content, item.sectionType, answerMap)).filter(Boolean)
+  return blocks.map(item => parseQuestionBlock(item.content, item.sectionType, answerMap, item)).filter(Boolean)
 }
 
 function toEditorContent(value) {
@@ -517,6 +539,9 @@ export default {
       parseTimer: null,
       editorPasteHandler: null,
       editorScrollHandler: null,
+      suppressEditorScrollUntil: 0,
+      suppressPreviewScrollUntil: 0,
+      syncReleaseTimer: null,
     }
   },
   computed: {
@@ -553,6 +578,9 @@ export default {
   beforeDestroy() {
     if (this.parseTimer) {
       clearTimeout(this.parseTimer)
+    }
+    if (this.syncReleaseTimer) {
+      clearTimeout(this.syncReleaseTimer)
     }
     this.unbindEditorEvents()
   },
@@ -849,7 +877,7 @@ answers:
       return getFileAccessHttpUrl(result.message) || result.message
     },
     async handleEditorScroll() {
-      if (!this.syncScroll || this.syncingFrom === 'preview') {
+      if (!this.syncScroll || this.syncingFrom === 'preview' || this.isScrollSuppressed('editor')) {
         return
       }
       const editor = await this.getCodeMirror()
@@ -857,15 +885,35 @@ answers:
       if (!editor || !preview) {
         return
       }
+      const questionElements = this.getPreviewQuestionElements()
+      const stickyOffset = this.getPreviewStickyOffset()
       const info = editor.getScrollInfo()
-      const editorMax = Math.max(1, info.height - info.clientHeight)
+      const topLine = editor.lineAtHeight(info.top, 'local')
+      const questionIndex = this.findQuestionIndexByLine(topLine)
+      if (questionIndex < 0 || !questionElements.length || !questionElements[questionIndex]) {
+        this.syncPreviewByRatio(preview, info)
+        return
+      }
+      const currentQuestion = this.parsedQuestions[questionIndex]
+      const nextQuestion = this.parsedQuestions[questionIndex + 1]
+      const currentElement = questionElements[questionIndex]
+      const nextElement = questionElements[questionIndex + 1]
+      const startLine = Number(currentQuestion._sourceStartLine) || 0
+      const endLine = nextQuestion
+        ? Math.max(startLine + 1, (Number(nextQuestion._sourceStartLine) || startLine + 1) - 1)
+        : Math.max(startLine + 1, Number(currentQuestion._sourceEndLine) || startLine + 1)
+      const lineRatio = this.clamp((topLine - startLine) / Math.max(1, endLine - startLine + 1), 0, 1)
+      const currentTop = currentElement.offsetTop - stickyOffset
+      const nextTop = nextElement
+        ? nextElement.offsetTop - stickyOffset
+        : currentTop + Math.max(80, currentElement.offsetHeight - stickyOffset)
+      const targetTop = currentTop + (nextTop - currentTop) * lineRatio
       const previewMax = Math.max(0, preview.scrollHeight - preview.clientHeight)
-      this.syncingFrom = 'editor'
-      preview.scrollTop = previewMax * (info.top / editorMax)
-      this.$nextTick(() => { this.syncingFrom = '' })
+      this.beginSync('editor', 'preview')
+      preview.scrollTop = this.clamp(targetTop, 0, previewMax)
     },
     async handlePreviewScroll() {
-      if (!this.syncScroll || this.syncingFrom === 'editor') {
+      if (!this.syncScroll || this.syncingFrom === 'editor' || this.isScrollSuppressed('preview')) {
         return
       }
       const editor = await this.getCodeMirror()
@@ -873,12 +921,101 @@ answers:
       if (!editor || !preview) {
         return
       }
+      const questionElements = this.getPreviewQuestionElements()
+      const stickyOffset = this.getPreviewStickyOffset()
+      const targetTop = preview.scrollTop + stickyOffset
+      const questionIndex = this.findPreviewQuestionIndexByScroll(targetTop, questionElements)
+      if (questionIndex < 0 || !questionElements.length || !this.parsedQuestions[questionIndex]) {
+        this.syncEditorByRatio(editor, preview)
+        return
+      }
+      const currentQuestion = this.parsedQuestions[questionIndex]
+      const nextQuestion = this.parsedQuestions[questionIndex + 1]
+      const currentElement = questionElements[questionIndex]
+      const nextElement = questionElements[questionIndex + 1]
+      const currentTop = currentElement.offsetTop
+      const nextTop = nextElement
+        ? nextElement.offsetTop
+        : currentTop + Math.max(80, currentElement.offsetHeight)
+      const cardRatio = this.clamp((targetTop - currentTop) / Math.max(1, nextTop - currentTop), 0, 1)
+      const startLine = Number(currentQuestion._sourceStartLine) || 0
+      const endLine = nextQuestion
+        ? Math.max(startLine + 1, (Number(nextQuestion._sourceStartLine) || startLine + 1) - 1)
+        : Math.max(startLine + 1, Number(currentQuestion._sourceEndLine) || startLine + 1)
+      const targetLine = Math.round(startLine + (endLine - startLine) * cardRatio)
+      this.beginSync('preview', 'editor')
+      editor.scrollTo(null, editor.heightAtLine(targetLine, 'local'))
+    },
+    beginSync(source, target) {
+      this.syncingFrom = source
+      this.suppressScroll(target, 140)
+      if (this.syncReleaseTimer) {
+        clearTimeout(this.syncReleaseTimer)
+      }
+      this.syncReleaseTimer = setTimeout(() => {
+        this.syncingFrom = ''
+      }, 140)
+    },
+    suppressScroll(target, duration = 140) {
+      const until = Date.now() + duration
+      if (target === 'editor') {
+        this.suppressEditorScrollUntil = until
+      } else if (target === 'preview') {
+        this.suppressPreviewScrollUntil = until
+      }
+    },
+    isScrollSuppressed(target) {
+      const now = Date.now()
+      if (target === 'editor') {
+        return now < this.suppressEditorScrollUntil
+      }
+      if (target === 'preview') {
+        return now < this.suppressPreviewScrollUntil
+      }
+      return false
+    },
+    clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value))
+    },
+    getPreviewQuestionElements() {
+      const refs = this.$refs.previewQuestionCards
+      if (!refs) {
+        return []
+      }
+      return Array.isArray(refs) ? refs : [refs]
+    },
+    getPreviewStickyOffset() {
+      const title = this.$refs.previewTitle
+      return title ? title.offsetHeight + 12 : 0
+    },
+    findQuestionIndexByLine(line) {
+      for (let i = this.parsedQuestions.length - 1; i >= 0; i -= 1) {
+        if (line >= (Number(this.parsedQuestions[i]._sourceStartLine) || 0)) {
+          return i
+        }
+      }
+      return this.parsedQuestions.length ? 0 : -1
+    },
+    findPreviewQuestionIndexByScroll(targetTop, elements) {
+      for (let i = elements.length - 1; i >= 0; i -= 1) {
+        if (targetTop >= elements[i].offsetTop) {
+          return i
+        }
+      }
+      return elements.length ? 0 : -1
+    },
+    syncPreviewByRatio(preview, info) {
+      const editorMax = Math.max(1, info.height - info.clientHeight)
+      const previewMax = Math.max(0, preview.scrollHeight - preview.clientHeight)
+      this.beginSync('editor', 'preview')
+      preview.scrollTop = previewMax * (info.top / editorMax)
+    },
+    syncEditorByRatio(editor, preview) {
       const info = editor.getScrollInfo()
       const editorMax = Math.max(0, info.height - info.clientHeight)
       const previewMax = Math.max(1, preview.scrollHeight - preview.clientHeight)
-      this.syncingFrom = 'preview'
+      this.beginSync('preview', 'editor')
       editor.scrollTo(null, editorMax * (preview.scrollTop / previewMax))
-      this.$nextTick(() => { this.syncingFrom = '' })
     },
   }
 }
