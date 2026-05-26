@@ -19,7 +19,7 @@ $ApiBaseSources = @(
     'maven:3.8-openjdk-8-slim'
 )
 $ApiMavenCacheVolume = 'teaching-open-m2-cache'
-$ApiRuntimeImage = 'registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-api:latest'
+$ApiRuntimeImage = 'teaching-open-api:latest'
 $ApiRuntimeBaseImage = 'teaching-open-local-openjdk8:latest'
 $ApiRuntimeBaseSources = @(
     'docker.m.daocloud.io/library/eclipse-temurin:8-jre-jammy',
@@ -33,7 +33,7 @@ $WebBaseSources = @(
     'node:16'
 )
 $WebNpmCacheVolume = 'teaching-open-npm-cache'
-$WebRuntimeImage = 'registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-web:latest'
+$WebRuntimeImage = 'teaching-open-web:latest'
 $WebRuntimeBaseImage = 'teaching-open-local-nginx:latest'
 $WebRuntimeBaseSources = @(
     'docker.m.daocloud.io/library/nginx:latest',

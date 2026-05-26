@@ -2,7 +2,7 @@ version: "3"
 
 services:
   db:
-    image: registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-db:latest
+    image: teaching-open-db:latest
     container_name: teachingopen_db
     environment:
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-teachingopen}
@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-api:latest
+    image: teaching-open-api:latest
     container_name: teachingopen_api
     env_file:
       - ./.env
@@ -41,7 +41,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: registry.cn-shanghai.aliyuncs.com/goodat/teaching-open-web:latest
+    image: teaching-open-web:latest
     container_name: teachingopen_web
     ports:
       - "80:80"

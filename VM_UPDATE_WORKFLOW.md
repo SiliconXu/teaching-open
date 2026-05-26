@@ -237,6 +237,12 @@ git pull
 
 如果这次只上传了构建产物，且 Dockerfile、Compose、SQL 都没有变化，这一步可以跳过。
 
+补充说明：
+
+- 服务器上的 Docker 容器只使用本地上传后的 `jar` 和 `dist` 来构建本地镜像
+- 不依赖任何业务远程镜像仓库里的 `teaching-open-api` 或 `teaching-open-web`
+- 因此 `docker build` 的镜像名、`docker-compose.yml` 里的镜像名，必须保持一致
+
 ---
 
 ## 6. 如果这次有数据库变更
@@ -316,19 +322,19 @@ cd /opt/teaching-open/deploy
 ### 8.1 只改前端
 
 ```bash
-docker compose up -d web
+docker compose up -d --force-recreate --no-deps web
 ```
 
 ### 8.2 只改后端
 
 ```bash
-docker compose up -d api
+docker compose up -d --force-recreate --no-deps api
 ```
 
 ### 8.3 前后端都改了
 
 ```bash
-docker compose up -d api web
+docker compose up -d --force-recreate api web
 ```
 
 ### 8.4 改了数据库结构，但只是执行了增量 SQL
@@ -336,7 +342,7 @@ docker compose up -d api web
 通常还是只需要：
 
 ```bash
-docker compose up -d api web
+docker compose up -d --force-recreate api web
 ```
 
 一般不需要重建 `db` 容器。
@@ -413,7 +419,7 @@ cd /opt/teaching-open
 git pull
 docker build -t teaching-open-web:latest -f web/Dockerfile web
 cd /opt/teaching-open/deploy
-docker compose up -d web
+docker compose up -d --force-recreate --no-deps web
 docker compose ps
 ```
 
@@ -435,7 +441,7 @@ cd /opt/teaching-open
 git pull
 docker build -t teaching-open-api:latest -f api/Dockerfile api
 cd /opt/teaching-open/deploy
-docker compose up -d api
+docker compose up -d --force-recreate --no-deps api
 docker compose ps
 ```
 
@@ -459,7 +465,7 @@ git pull
 docker build -t teaching-open-api:latest -f api/Dockerfile api
 docker build -t teaching-open-web:latest -f web/Dockerfile web
 cd /opt/teaching-open/deploy
-docker compose up -d api web
+docker compose up -d --force-recreate api web
 docker compose ps
 ```
 
@@ -481,7 +487,7 @@ docker exec teachingopen_db sh -c "mysql --default-character-set=utf8mb4 -uroot 
 docker build -t teaching-open-api:latest -f api/Dockerfile api
 docker build -t teaching-open-web:latest -f web/Dockerfile web
 cd /opt/teaching-open/deploy
-docker compose up -d api web
+docker compose up -d --force-recreate api web
 docker compose ps
 ```
 
@@ -502,6 +508,7 @@ docker compose ps
 - 不要在服务器上直接跑重型 `mvn clean package`
 - 不要把 `jar`、`dist` 当源码提交进 Git
 - 不要改了 `deploy/.env` 却忘记备份旧文件
+- 不要让 `docker build` 的镜像名和 `docker-compose.yml` 里的 `image` 不一致
 
 ---
 
@@ -513,4 +520,3 @@ docker compose ps
 - 只改后端：本地 `backend` -> 上传 Jar -> 服务器重建 `api` -> 重启 `api`
 - 前后端都改：本地 `full` -> 上传 Jar 和 `dist` -> 服务器重建 `api`、`web` -> 重启
 - 改了数据库：先备份生产库 -> 执行增量 SQL -> 再重建并重启 `api`、`web`
-

@@ -91,12 +91,12 @@
             />
           </div>
           <div class="answer-line">你的答案：{{ answerLabel(item.studentAnswer) }}</div>
-          <div class="answer-line">正确答案：{{ answerLabel(item.correctAnswer) }}</div>
-          <div v-if="item.analysisText" class="analysis-box">
+          <div v-if="page.showResultAfterSubmit" class="answer-line">正确答案：{{ answerLabel(item.correctAnswer) }}</div>
+          <div v-if="page.showResultAfterSubmit && item.analysisText" class="analysis-box">
             <div class="analysis-title">解析</div>
             <div class="rich-content" v-html="renderRichText(item.analysisText)"></div>
           </div>
-          <div v-if="splitImages(item.analysisImages).length" class="image-grid compact">
+          <div v-if="page.showResultAfterSubmit && splitImages(item.analysisImages).length" class="image-grid compact">
             <img
               v-for="(image, imageIndex) in splitImages(item.analysisImages)"
               :key="imageIndex"
@@ -188,7 +188,7 @@ export default {
       return this.viewMode !== 'review'
     },
     showResultItems() {
-      return this.page.showResultAfterSubmit && this.page.latestResult && this.page.latestResult.items && this.page.latestResult.items.length
+      return this.page.latestResult && this.page.latestResult.items && this.page.latestResult.items.length
     },
     resultMessage() {
       if (!this.page.latestResult) {
@@ -201,7 +201,7 @@ export default {
         return ''
       }
       if (!this.page.showResultAfterSubmit) {
-        return '老师设置了提交后不展示答案解析，当前仅显示得分结果。'
+        return `答对 ${this.page.latestResult.rightCount} 题，共 ${this.page.latestResult.questionCount} 题。当前显示每题对错和你的答案，不显示正确答案与解析。`
       }
       return `答对 ${this.page.latestResult.rightCount} 题，共 ${this.page.latestResult.questionCount} 题。`
     }
